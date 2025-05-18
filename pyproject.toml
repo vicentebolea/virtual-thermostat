@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "virtual-thermostat"
+version = "0.1.0"
+description = "A virtual thermostat for controlling smart plugs based on temperature"
+authors = [
+    {name = "Vicente Bolea"}
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "python-kasa",
+    "requests",
+]
+
+[project.scripts]
+vthermostat = "virtual_thermostat.main:main"
+
+[tool.setuptools]
+packages = ["virtual_thermostat"]
+
+[tool.black]
+line-length = 88
+target-version = ["py38", "py39", "py310", "py311"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "isort",
+]

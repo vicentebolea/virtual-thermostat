@@ -1,0 +1,4 @@
+.venv
+venv
+virtual_thermostat.egg-info/
+vthermostat_state.json
