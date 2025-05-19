@@ -7,10 +7,8 @@ import asyncio
 import argparse
 import json
 import logging
-import os
 import re
 import sys
-import time
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
@@ -103,7 +101,8 @@ class VirtualThermostat:
         )
         logger.info(f"State file: {state_file}, cooldown: {cooldown_minutes} minutes")
         logger.info(
-            f"Temperature thresholds: LOW={self.temp_threshold_low}°{temp_unit}, HIGH={self.temp_threshold_high}°{temp_unit}"
+            f"Temperature thresholds: LOW={self.temp_threshold_low}°{temp_unit}, "
+            f"HIGH={self.temp_threshold_high}°{temp_unit}"
         )
         logger.info(f"Using temperature unit: {temp_unit}")
 
@@ -135,7 +134,8 @@ class VirtualThermostat:
                     old_unit = state["last_temperature_unit"]
                     new_temp = convert_temperature(old_temp, old_unit, self.temp_unit)
                     logger.info(
-                        f"Converting stored temperature from {old_temp}°{old_unit} to {new_temp:.1f}°{self.temp_unit}"
+                        f"Converting stored temperature from {old_temp}°{old_unit} "
+                        f"to {new_temp:.1f}°{self.temp_unit}"
                     )
                     state["last_temperature"] = new_temp
                     state["last_temperature_unit"] = self.temp_unit
@@ -236,13 +236,15 @@ class VirtualThermostat:
 
             if time_since_change >= cooldown_period:
                 logger.info(
-                    f"Cooldown period passed: {time_since_change.total_seconds() / 60:.1f} minutes since last action"
+                    f"Cooldown period passed: "
+                    f"{time_since_change.total_seconds() / 60:.1f} mins since action"
                 )
                 return True
             else:
                 remaining = cooldown_period - time_since_change
                 logger.info(
-                    f"In cooldown period. {remaining.total_seconds() / 60:.1f} minutes remaining"
+                    f"In cooldown period. {remaining.total_seconds() / 60:.1f} "
+                    f"minutes remaining"
                 )
                 return False
         except (ValueError, TypeError) as e:
@@ -274,17 +276,20 @@ class VirtualThermostat:
         # Logic for turning AC on/off
         if temperature >= self.temp_threshold_high and not current_state:
             logger.info(
-                f"Temperature {temperature:.1f}°{self.temp_unit} >= threshold {self.temp_threshold_high}°{self.temp_unit}, turning AC ON"
+                f"Temperature {temperature:.1f}°{self.temp_unit} >= threshold "
+                f"{self.temp_threshold_high}°{self.temp_unit}, turning AC ON"
             )
             await self.set_plug_state(True)
         elif temperature <= self.temp_threshold_low and current_state:
             logger.info(
-                f"Temperature {temperature:.1f}°{self.temp_unit} <= threshold {self.temp_threshold_low}°{self.temp_unit}, turning AC OFF"
+                f"Temperature {temperature:.1f}°{self.temp_unit} <= threshold "
+                f"{self.temp_threshold_low}°{self.temp_unit}, turning AC OFF"
             )
             await self.set_plug_state(False)
         else:
             logger.info(
-                f"No action needed. Temperature: {temperature:.1f}°{self.temp_unit}, AC is {'ON' if current_state else 'OFF'}"
+                f"No action needed. Temperature: {temperature:.1f}°{self.temp_unit}, "
+                f"AC is {'ON' if current_state else 'OFF'}"
             )
 
     async def run_once(self):
@@ -327,14 +332,17 @@ def parse_args():
         "--cooldown",
         type=int,
         default=DEFAULT_COOLDOWN_MINUTES,
-        help=f"Cooldown period in minutes between state changes (default: {DEFAULT_COOLDOWN_MINUTES})",
+        help=(
+            f"Cooldown period in minutes between state changes "
+            f"(default: {DEFAULT_COOLDOWN_MINUTES})"
+        ),
     )
     parser.add_argument(
         "--temp-unit",
         type=str,
         choices=["F", "C"],
         default="F",
-        help=f"Temperature unit to use (F=Fahrenheit, C=Celsius, default: F)",
+        help="Temperature unit to use (F=Fahrenheit, C=Celsius, default: F)",
     )
     temp_group = parser.add_argument_group("Temperature thresholds")
     temp_group.add_argument(
@@ -342,7 +350,8 @@ def parse_args():
         type=float,
         help=(
             f"Temperature threshold to turn off AC "
-            f"(default: {DEFAULT_TEMP_THRESHOLD_LOW_F}°F or {DEFAULT_TEMP_THRESHOLD_LOW_C}°C, depending on --temp-unit)"
+            f"(default: {DEFAULT_TEMP_THRESHOLD_LOW_F}°F or "
+            f"{DEFAULT_TEMP_THRESHOLD_LOW_C}°C, depending on --temp-unit)"
         ),
     )
     temp_group.add_argument(
@@ -350,14 +359,18 @@ def parse_args():
         type=float,
         help=(
             f"Temperature threshold to turn on AC "
-            f"(default: {DEFAULT_TEMP_THRESHOLD_HIGH_F}°F or {DEFAULT_TEMP_THRESHOLD_HIGH_C}°C, depending on --temp-unit)"
+            f"(default: {DEFAULT_TEMP_THRESHOLD_HIGH_F}°F or "
+            f"{DEFAULT_TEMP_THRESHOLD_HIGH_C}°C, depending on --temp-unit)"
         ),
     )
     parser.add_argument(
         "--interval",
         type=int,
         default=DEFAULT_CHECK_INTERVAL,
-        help=f"Check interval in seconds for daemon mode (default: {DEFAULT_CHECK_INTERVAL})",
+        help=(
+            f"Check interval in seconds for daemon mode "
+            f"(default: {DEFAULT_CHECK_INTERVAL})"
+        ),
     )
     parser.add_argument(
         "--once",
