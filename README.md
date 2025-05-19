@@ -9,6 +9,8 @@ A Python daemon for controlling smart plugs connected to air conditioners based 
 - Maintains state between runs with an external file
 - Only triggers AC changes after a configurable cool-down period
 - Runs as a daemon process
+- Web interface for monitoring and controlling the thermostat
+- Configurable temperature thresholds and cooldown period through the web interface
 
 ## Installation
 
@@ -29,6 +31,26 @@ vthermostat --host 192.168.1.100 --zipcode 12866 --state-file /path/to/state.jso
 - `--zipcode`: ZIP code for temperature data.
 - `--state-file`: Path to the file for storing state between runs
 - `--cooldown`: Minimum time (in minutes) between AC state changes
+- `--web`: Start the web interface
+- `--web-port`: Port for the web interface (default: 8080)
+
+## Web Interface
+
+The web interface allows you to:
+
+1. Monitor the current temperature and thermostat status
+2. Enable or disable the thermostat
+3. Manually control the AC (turn it on/off)
+4. Configure temperature thresholds (when to turn AC on/off)
+5. Set the cooldown period between AC state changes
+
+To start the web interface:
+
+```bash
+vthermostat --host 192.168.1.100 --zipcode 12866 --web --web-port 8080
+```
+
+Then open a browser and navigate to http://localhost:8080
 
 ## Authors
 

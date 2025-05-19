@@ -9,12 +9,16 @@ import json
 import logging
 import re
 import sys
+import threading
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 
 import requests
 from kasa import SmartPlug
+
+# Import the web module
+from .web import create_flask_app, run_flask_app
 
 # Configure logging
 logging.basicConfig(
@@ -41,6 +45,7 @@ DEFAULT_TEMP_THRESHOLD_HIGH_C = 27  # Default in Celsius
 DEFAULT_COOLDOWN_MINUTES = 360  # 6 hours
 DEFAULT_STATE_FILE = "vthermostat_state.json"
 DEFAULT_CHECK_INTERVAL = 600  # 10 minutes
+DEFAULT_WEB_PORT = 8080  # Default web interface port
 
 
 def convert_temperature(temp, from_unit, to_unit):
@@ -96,6 +101,8 @@ class VirtualThermostat:
 
         self.plug = SmartPlug(self.host)
         self.state = self._load_state()
+        self.enabled = self.state.get("enabled", True)  # Thermostat starts enabled by default
+
         logger.info(
             f"Initialized VirtualThermostat with: host={host}, zipcode={zipcode}"
         )
@@ -105,6 +112,7 @@ class VirtualThermostat:
             f"HIGH={self.temp_threshold_high}°{temp_unit}"
         )
         logger.info(f"Using temperature unit: {temp_unit}")
+        logger.info(f"Thermostat is {'enabled' if self.enabled else 'disabled'}")
 
     def _load_state(self):
         """Load the state from the state file."""
@@ -117,6 +125,7 @@ class VirtualThermostat:
                 "last_action": None,
                 "last_temperature": None,
                 "last_temperature_unit": None,
+                "enabled": True,
             }
 
         try:
@@ -140,6 +149,19 @@ class VirtualThermostat:
                     state["last_temperature"] = new_temp
                     state["last_temperature_unit"] = self.temp_unit
 
+                # Load saved settings if available
+                if "temp_threshold_low" in state:
+                    self.temp_threshold_low = state["temp_threshold_low"]
+                    logger.info(f"Loaded temp_threshold_low from state: {self.temp_threshold_low}°{self.temp_unit}")
+
+                if "temp_threshold_high" in state:
+                    self.temp_threshold_high = state["temp_threshold_high"]
+                    logger.info(f"Loaded temp_threshold_high from state: {self.temp_threshold_high}°{self.temp_unit}")
+
+                if "cooldown_minutes" in state:
+                    self.cooldown_minutes = state["cooldown_minutes"]
+                    logger.info(f"Loaded cooldown_minutes from state: {self.cooldown_minutes} minutes")
+
                 return state
         except (json.JSONDecodeError, IOError) as e:
             logger.error(f"Error loading state file: {e}")
@@ -148,6 +170,7 @@ class VirtualThermostat:
                 "last_action": None,
                 "last_temperature": None,
                 "last_temperature_unit": None,
+                "enabled": True,
             }
 
     def _save_state(self):
@@ -159,6 +182,12 @@ class VirtualThermostat:
                 and self.state["last_temperature"] is not None
             ):
                 self.state["last_temperature_unit"] = self.temp_unit
+
+            # Save enabled state and settings
+            self.state["enabled"] = self.enabled
+            self.state["temp_threshold_low"] = self.temp_threshold_low
+            self.state["temp_threshold_high"] = self.temp_threshold_high
+            self.state["cooldown_minutes"] = self.cooldown_minutes
 
             with open(self.state_file, "w") as f:
                 json.dump(self.state, f, indent=2)
@@ -262,6 +291,11 @@ class VirtualThermostat:
         self.state["last_temperature"] = temperature
         self._save_state()
 
+        # Check if thermostat is enabled
+        if not self.enabled:
+            logger.info("Thermostat is disabled, skipping adjustment")
+            return
+
         # If we're in the cooldown period, don't change state
         if not self.can_change_state():
             return
@@ -309,6 +343,60 @@ class VirtualThermostat:
             # Sleep for the check interval
             logger.info(f"Sleeping for {check_interval} seconds")
             await asyncio.sleep(check_interval)
+
+    def enable(self):
+        """Enable the thermostat."""
+        if not self.enabled:
+            self.enabled = True
+            self.state["enabled"] = True
+            self._save_state()
+            logger.info("Thermostat enabled")
+            return True
+        logger.info("Thermostat already enabled")
+        return False
+
+    def disable(self):
+        """Disable the thermostat."""
+        if self.enabled:
+            self.enabled = False
+            self.state["enabled"] = False
+            self._save_state()
+            logger.info("Thermostat disabled")
+            return True
+        logger.info("Thermostat already disabled")
+        return False
+
+    def toggle(self):
+        """Toggle the thermostat on/off."""
+        if self.enabled:
+            result = self.disable()
+            return {"success": result, "enabled": False}
+        else:
+            result = self.enable()
+            return {"success": result, "enabled": True}
+
+    def get_info(self):
+        """Get thermostat information."""
+        info = {
+            "enabled": self.enabled,
+            "host": self.host,
+            "zipcode": self.zipcode,
+            "temp_unit": self.temp_unit,
+            "temp_threshold_low": self.temp_threshold_low,
+            "temp_threshold_high": self.temp_threshold_high,
+            "cooldown_minutes": self.cooldown_minutes,
+        }
+
+        # Add state information
+        if self.state.get("last_temperature") is not None:
+            info["current_temperature"] = self.state.get("last_temperature")
+        if self.state.get("last_action_time") is not None:
+            info["last_action_time"] = self.state.get("last_action_time")
+            info["last_action"] = self.state.get("last_action")
+
+        return info
+
+
 
 
 def parse_args():
@@ -372,10 +460,50 @@ def parse_args():
             f"(default: {DEFAULT_CHECK_INTERVAL})"
         ),
     )
-    parser.add_argument(
+
+    # Command group
+    command_group = parser.add_argument_group("Commands")
+    command_parser = command_group.add_mutually_exclusive_group()
+    command_parser.add_argument(
         "--once",
         action="store_true",
         help="Run once and exit instead of running as a daemon",
+    )
+    command_parser.add_argument(
+        "--info",
+        action="store_true",
+        help="Display thermostat information and exit",
+    )
+    command_parser.add_argument(
+        "--enable",
+        action="store_true",
+        help="Enable the thermostat and exit",
+    )
+    command_parser.add_argument(
+        "--disable",
+        action="store_true",
+        help="Disable the thermostat and exit",
+    )
+    command_parser.add_argument(
+        "--ac-on",
+        action="store_true",
+        help="Turn the AC (smart plug) ON and exit",
+    )
+    command_parser.add_argument(
+        "--ac-off",
+        action="store_true",
+        help="Turn the AC (smart plug) OFF and exit",
+    )
+    command_parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Start the web interface",
+    )
+    parser.add_argument(
+        "--web-port",
+        type=int,
+        default=DEFAULT_WEB_PORT,
+        help=f"Port for the web interface (default: {DEFAULT_WEB_PORT})",
     )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
@@ -401,7 +529,41 @@ def main():
     )
 
     try:
-        if args.once:
+        # Handle commands
+        if args.info:
+            info = thermostat.get_info()
+            print(json.dumps(info, indent=2))
+            return 0
+        elif args.enable:
+            thermostat.enable()
+            print("Thermostat enabled")
+            return 0
+        elif args.disable:
+            thermostat.disable()
+            print("Thermostat disabled")
+            return 0
+        elif args.ac_on:
+            asyncio.run(thermostat.set_plug_state(True))
+            print("AC turned ON")
+            return 0
+        elif args.ac_off:
+            asyncio.run(thermostat.set_plug_state(False))
+            print("AC turned OFF")
+            return 0
+        elif args.web:
+            # Start the web interface
+            app = create_flask_app(thermostat)
+            web_thread = threading.Thread(
+                target=run_flask_app, args=(app, args.web_port), daemon=True
+            )
+            web_thread.start()
+            logger.info(f"Web interface started on port {args.web_port}")
+            logger.info(f"Access at http://localhost:{args.web_port}/")
+
+            # Run the thermostat daemon
+            logger.info("Running in daemon mode with web interface")
+            asyncio.run(thermostat.run_daemon(args.interval))
+        elif args.once:
             logger.info("Running in single execution mode")
             asyncio.run(thermostat.run_once())
         else:
