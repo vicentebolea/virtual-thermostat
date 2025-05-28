@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  # Web UI container
+  ui:
+    image: ghcr.io/vicentebolea/virtual-thermostat/virtual-thermostat:latest
+    container_name: vthermostat-ui
+    network_mode: host
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+    command: ["vthermostat-ui", "--config", "/app/config/vthermostat_config.json", "--state", "/app/config/vthermostat_state.json", "--port", "8080"]
+    restart: unless-stopped
+    depends_on:
+      - dht11
+
+  # Daemon container
+  daemon:
+    image: ghcr.io/vicentebolea/virtual-thermostat/virtual-thermostat:latest
+    container_name: vthermostat-daemon
+    network_mode: host
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+    command: ["vthermostat-daemon", "--config", "/app/config/vthermostat_config.json", "--state", "/app/config/vthermostat_state.json", "--temp", "/app/data/temp_sensor.txt", "--interval", "60"]
+    restart: unless-stopped
+    depends_on:
+      - dht11
+
+  # DHT11 sensor reader container
+  dht11:
+    image: ghcr.io/vicentebolea/virtual-thermostat/virtual-thermostat:latest
+    container_name: vthermostat-dht11
+    network_mode: host
+    privileged: true
+    devices:
+      - /dev/gpiomem:/dev/gpiomem
+    volumes:
+      - ./data:/app/data
+    command: ["vthermostat-dht11", "--output", "/app/data/temp_sensor.txt", "--interval", "30", "--simulate"]
+    restart: unless-stopped
+
+volumes:
+  # Named volumes for persistent data (optional - using bind mounts above)
+  config-data:
+  sensor-data:

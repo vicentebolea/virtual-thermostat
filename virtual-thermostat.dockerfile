@@ -7,6 +7,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt -y --no-install-recommends update && \
 RUN python3 -mpip install python-kasa
 
 COPY . /opt/virtual-thermostat
-RUN pip install -e /opt/virtual-thermostat
+RUN pip install /opt/virtual-thermostat
 
-ENTRYPOINT [ "vthermostat" ]
+# Default to CLI, but allow override
+CMD [ "vthermostat-cli" ]

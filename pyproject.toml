@@ -13,11 +13,16 @@ readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
     "python-kasa",
-    "requests",
+    "trame",
+    "trame-vuetify",
+    "trame-server",
 ]
 
 [project.scripts]
-vthermostat = "virtual_thermostat.main:main"
+vthermostat-cli = "virtual_thermostat.cli:cli_main"
+vthermostat-ui = "virtual_thermostat.ui:main"
+vthermostat-daemon = "virtual_thermostat.daemon:main"
+vthermostat-dht11 = "virtual_thermostat.dht11:main"
 
 [tool.setuptools]
 packages = ["virtual_thermostat"]
@@ -25,19 +30,7 @@ packages = ["virtual_thermostat"]
 [tool.black]
 line-length = 88
 target-version = ["py38", "py39", "py310", "py311"]
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | build
-  | dist
-)/
-'''
+include = 'virtual_thermostat/.*\.pyi?$'
 
 [tool.isort]
 profile = "black"
@@ -49,4 +42,7 @@ dev = [
     "isort",
     "flake8",
     "pytest",
+]
+hardware = [
+    "Adafruit-DHT",
 ]
