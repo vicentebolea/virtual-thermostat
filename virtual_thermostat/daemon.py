@@ -19,13 +19,16 @@ logger = logging.getLogger("thermostat-daemon")
 
 
 class ThermostatDaemon:
-    def __init__(self, interval=60, config_file=None, state_file=None, temp_file=None):
+    def __init__(
+        self, interval=60, config_file=None, state_file=None, temp_file=None, host=None
+    ):
         self.interval = interval
         self.running = True
         self.main_script_path = Path(__file__).parent / "cli.py"
         self.config_file = config_file
         self.state_file = state_file
         self.temp_file = temp_file
+        self.host = host
 
         # Set up signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -49,6 +52,8 @@ class ThermostatDaemon:
                 cmd.extend(["--state", self.state_file])
             if self.temp_file:
                 cmd.extend(["--temp", self.temp_file])
+            if self.host:
+                cmd.extend(["--host", self.host])
 
             process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -126,6 +131,10 @@ def main():
         "--temp",
         help="Path to temperature file",
     )
+    parser.add_argument(
+        "--host",
+        help="Smart plug host IP address (used when creating default config)",
+    )
 
     args = parser.parse_args()
 
@@ -135,6 +144,7 @@ def main():
             config_file=args.config,
             state_file=args.state,
             temp_file=args.temp,
+            host=args.host,
         )
         await daemon.run()
 

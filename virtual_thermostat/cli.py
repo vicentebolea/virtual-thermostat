@@ -15,11 +15,6 @@ from pathlib import Path
 
 from kasa import SmartPlug
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger("simple-thermostat")
 
 DEFAULT_CONFIG_FILE = "config/vthermostat_config.json"
@@ -27,12 +22,35 @@ DEFAULT_STATE_FILE = "config/vthermostat_state.json"
 DEFAULT_TEMP_FILE = "data/temp_sensor.txt"
 
 
-def read_config(config_file=DEFAULT_CONFIG_FILE):
-    """Read configuration from file."""
+def create_default_config(config_file, host=None):
+    """Create a default configuration file."""
+    default_config = {
+        "host": host or "192.168.1.100",
+        "desired_temperature": 24.0,
+        "temp_file": "data/temp_sensor.txt",
+        "state_file": "config/vthermostat_state.json",
+        "cooldown_minutes": 15,
+    }
+
+    config_path = Path(config_file)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with open(config_path, "w") as f:
+            json.dump(default_config, f, indent=2)
+        logger.info(f"Created default config file: {config_file}")
+        return default_config
+    except IOError as e:
+        logger.error(f"Error creating config file: {e}")
+        sys.exit(1)
+
+
+def read_config(config_file=DEFAULT_CONFIG_FILE, host=None):
+    """Read configuration from file, create default if it doesn't exist."""
     config_path = Path(config_file)
     if not config_path.exists():
-        logger.error(f"Config file {config_file} not found")
-        sys.exit(1)
+        logger.info(f"Config file {config_file} not found, creating default")
+        return create_default_config(config_file, host)
 
     try:
         with open(config_path, "r") as f:
@@ -135,7 +153,7 @@ async def control_ac(host, turn_on):
         return None
 
 
-async def main(config_file=None, state_file=None, temp_file=None):
+async def main(config_file=None, state_file=None, temp_file=None, host=None):
     """Main function."""
     # Use provided arguments or defaults
     config_file = config_file or DEFAULT_CONFIG_FILE
@@ -143,7 +161,7 @@ async def main(config_file=None, state_file=None, temp_file=None):
     temp_file = temp_file or DEFAULT_TEMP_FILE
 
     # Read configuration
-    config = read_config(config_file)
+    config = read_config(config_file, host)
 
     required_keys = ["host", "desired_temperature"]
     for key in required_keys:
@@ -246,14 +264,36 @@ def parse_args():
         default=DEFAULT_TEMP_FILE,
         help=f"Path to temperature file (default: {DEFAULT_TEMP_FILE})",
     )
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="WARNING",
+        help="Set the logging level (default: WARNING)",
+    )
+    parser.add_argument(
+        "--host",
+        help="Smart plug host IP address (used when creating default config)",
+    )
     return parser.parse_args()
 
 
 def cli_main():
     """Entry point for CLI."""
     args = parse_args()
+
+    # Configure logging with the specified level
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format="%(asctime)s - %(levelname)s - %(message)s",
+    )
+
     asyncio.run(
-        main(config_file=args.config, state_file=args.state, temp_file=args.temp)
+        main(
+            config_file=args.config,
+            state_file=args.state,
+            temp_file=args.temp,
+            host=args.host,
+        )
     )
 
 
