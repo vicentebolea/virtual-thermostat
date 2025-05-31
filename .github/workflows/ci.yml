@@ -67,13 +67,18 @@ jobs:
           pytest tests/test_smoke.py -v
 
   build-and-push:
-    runs-on: ubuntu-latest
     needs: [smoke-test, lint, actionlint]
     permissions:
       contents: read
       packages: write
     if: github.ref == 'refs/heads/master'
 
+    strategy:
+      fail-fast: false
+      matrix:
+        base-img: [ "ubuntu-latest",  "ubuntu-24.04-arm" ]
+
+    runs-on: ${{ matrix.base-img }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -93,13 +98,14 @@ jobs:
 
       - name: Build and push container image
         run: |
+          ARCH="$(uname -m)"
           # Build the image
-          podman build -t ghcr.io/${{ github.repository }}/virtual-thermostat:latest \
-                       -t ghcr.io/${{ github.repository }}/virtual-thermostat:${{ github.sha }} \
-                       -t ghcr.io/${{ github.repository }}/virtual-thermostat:${{ steps.slug.outputs.SHORT_SHA }} \
+          podman build -t "ghcr.io/${{ github.repository }}/virtual-thermostat-${ARCH}:latest" \
+                       -t "ghcr.io/${{ github.repository }}/virtual-thermostat-${ARCH}:${{ github.sha }}" \
+                       -t "ghcr.io/${{ github.repository }}/virtual-thermostat-${ARCH}:${{ steps.slug.outputs.SHORT_SHA }}" \
                        -f ./virtual-thermostat.dockerfile .
 
           # Push all tags
-          podman push ghcr.io/${{ github.repository }}/virtual-thermostat:latest
-          podman push ghcr.io/${{ github.repository }}/virtual-thermostat:${{ github.sha }}
-          podman push ghcr.io/${{ github.repository }}/virtual-thermostat:${{ steps.slug.outputs.SHORT_SHA }}
+          podman push "ghcr.io/${{ github.repository }}/virtual-thermostat-${ARCH}:latest"
+          podman push "ghcr.io/${{ github.repository }}/virtual-thermostat-${ARCH}:${{ github.sha }}"
+          podman push "ghcr.io/${{ github.repository }}/virtual-thermostat-${ARCH}:${{ steps.slug.outputs.SHORT_SHA }}"
