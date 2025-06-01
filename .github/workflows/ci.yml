@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -76,7 +80,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        base-img: [ "ubuntu-latest",  "ubuntu-24.04-arm" ]
+        include:
+           - base-img: "ubuntu-latest"
+           - base-img: "ubuntu-24.04-arm"
+           - base-img: "self-hosted"
+             target_arch: "armv6l"
+             arch_params: --build-arg=TARGETARCH=arm --platform=linux/arm/v6
 
     runs-on: ${{ matrix.base-img }}
     steps:
@@ -98,9 +107,10 @@ jobs:
 
       - name: Build and push container image
         run: |
-          ARCH="$(uname -m)"
+          ARCH="${{ matrix.target_arch }}"
+          [ -z "${ARCH}" ] && ARCH="$(uname -m)"
           # Build the image
-          podman build -t "ghcr.io/${{ github.repository }}/virtual-thermostat-${ARCH}:latest" \
+          podman build ${{ matrix.arch_params }} -t "ghcr.io/${{ github.repository }}/virtual-thermostat-${ARCH}:latest" \
                        -t "ghcr.io/${{ github.repository }}/virtual-thermostat-${ARCH}:${{ github.sha }}" \
                        -t "ghcr.io/${{ github.repository }}/virtual-thermostat-${ARCH}:${{ steps.slug.outputs.SHORT_SHA }}" \
                        -f ./virtual-thermostat.dockerfile .
