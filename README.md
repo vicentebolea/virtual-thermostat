@@ -73,8 +73,11 @@ vthermostat-cli --config custom_config.json --state custom_state.json
 # With custom temperature file
 vthermostat-cli --temp /path/to/temp_sensor.txt
 
-# With MQTT options
+# With MQTT options (overrides config file)
 vthermostat-cli --mqtt-broker 192.168.1.50 --mqtt-port 1883 --mqtt-topic sensors/temperature
+
+# Force MQTT usage even if config has it disabled
+vthermostat-cli --mqtt-broker localhost --mqtt-topic home/temperature
 ```
 
 ### Web Controller
@@ -113,18 +116,32 @@ vthermostat-daemon --interval 30 --config custom_config.json
 
 ### Docker Deployment
 
-Deploy all components using Docker Compose:
+Deploy all components including MQTT broker using Docker Compose:
 
 ```bash
-# Quick start with Docker
+# Quick start with Docker (includes MQTT broker)
 docker-compose up -d
 
-# View logs
+# View logs for all services
 docker-compose logs -f
+
+# View MQTT broker logs specifically
+docker-compose logs -f mqtt
 
 # Stop services
 docker-compose down
 ```
+
+**Docker Services:**
+- **mqtt**: Eclipse Mosquitto MQTT broker (ports 1883, 9001)
+- **dht11**: DHT11 sensor reader (publishes to MQTT)
+- **daemon**: Thermostat daemon (subscribes to MQTT for temperature)
+- **ui**: Web interface
+
+**MQTT Integration:**
+- DHT11 sensor publishes temperature data to `thermostat/temperature`
+- Thermostat daemon subscribes to receive temperature updates
+- No file-based communication needed when using MQTT
 
 See [DOCKER.md](DOCKER.md) for detailed Docker deployment guide.
 

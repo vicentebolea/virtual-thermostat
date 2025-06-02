@@ -1,6 +1,17 @@
 version: '3.8'
 
 services:
+  # MQTT Broker (Mosquitto)
+  mqtt:
+    image: eclipse-mosquitto:2.0
+    container_name: vthermostat-mqtt
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mqtt/config:/mosquitto/config
+      - mqtt-data:/mosquitto/data
+    restart: unless-stopped
+
   # Web UI container
   ui:
     image: ghcr.io/vicentebolea/virtual-thermostat/virtual-thermostat:latest
@@ -13,6 +24,7 @@ services:
     restart: unless-stopped
     depends_on:
       - dht11
+      - mqtt
 
   # Daemon container
   daemon:
@@ -26,6 +38,7 @@ services:
     restart: unless-stopped
     depends_on:
       - dht11
+      - mqtt
 
   # DHT11 sensor reader container
   dht11:
@@ -37,10 +50,11 @@ services:
       - /dev/gpiomem:/dev/gpiomem
     volumes:
       - ./data:/app/data
-    command: ["vthermostat-dht11", "--output", "/app/data/temp_sensor.txt", "--interval", "30", "--simulate"]
+    command: ["vthermostat-dht11", "--output", "/app/data/temp_sensor.txt", "--interval", "30", "--simulate", "--mqtt-broker", "mqtt", "--mqtt-topic", "thermostat/temperature"]
+    depends_on:
+      - mqtt
     restart: unless-stopped
 
 volumes:
-  # Named volumes for persistent data (optional - using bind mounts above)
-  config-data:
-  sensor-data:
+  # Named volumes for persistent data
+  mqtt-data:

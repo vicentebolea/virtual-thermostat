@@ -5,7 +5,7 @@
   "state_file": "config/vthermostat_state.json",
   "cooldown_minutes": 15,
   "mqtt": {
-    "enabled": false,
+    "enabled": true,
     "broker": "localhost",
     "port": 1883,
     "topic": "thermostat/temperature"

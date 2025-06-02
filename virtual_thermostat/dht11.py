@@ -75,25 +75,7 @@ class DHT11Reader:
             return
 
         try:
-            # Map GPIO pin number to board pin
-            pin_map = {}
-            supported_pins = [4, 17, 18, 22, 23, 24, 25, 27]
-
-            for pin_num in supported_pins:
-                try:
-                    pin_attr = f"D{pin_num}"
-                    if hasattr(board, pin_attr):
-                        pin_map[pin_num] = getattr(board, pin_attr)
-                except AttributeError:
-                    continue
-
-            if self.pin not in pin_map:
-                logger.debug(
-                    f"GPIO pin {self.pin} not available on this platform. Available pins: {list(pin_map.keys())}"
-                )
-                return
-
-            self.sensor = adafruit_dht.DHT11(pin_map[self.pin])
+            self.sensor = adafruit_dht.DHT11(getattr(board, f"D{self.pin}"))
             logger.debug(f"Initialized DHT11 sensor on GPIO pin {self.pin}")
 
         except Exception as e:

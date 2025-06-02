@@ -43,6 +43,7 @@ sensor = [
     "paho-mqtt",
     "adafruit-circuitpython-dht",
     "board",
+    "RPi.GPIO",
 ]
 
 dev = [

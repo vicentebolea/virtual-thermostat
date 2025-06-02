@@ -292,7 +292,15 @@ async def control_ac(host, turn_on):
         return None
 
 
-async def main(config_file=None, state_file=None, temp_file=None, host=None):
+async def main(
+    config_file=None,
+    state_file=None,
+    temp_file=None,
+    host=None,
+    mqtt_broker=None,
+    mqtt_port=None,
+    mqtt_topic=None,
+):
     """Main function."""
     # Use provided arguments or defaults
     config_file = config_file or DEFAULT_CONFIG_FILE
@@ -317,6 +325,16 @@ async def main(config_file=None, state_file=None, temp_file=None, host=None):
 
     # Read current temperature (MQTT or file)
     mqtt_config = config.get("mqtt", {})
+
+    # Override MQTT config with CLI arguments if provided
+    if mqtt_broker is not None:
+        mqtt_config = {
+            "enabled": True,
+            "broker": mqtt_broker,
+            "port": mqtt_port or mqtt_config.get("port", 1883),
+            "topic": mqtt_topic or mqtt_config.get("topic", "thermostat/temperature"),
+        }
+
     temperature = read_temperature(temp_file, mqtt_config)
     if temperature is None:
         logger.error("Could not read temperature")
@@ -447,6 +465,9 @@ def cli_main():
             state_file=args.state,
             temp_file=args.temp,
             host=args.host,
+            mqtt_broker=args.mqtt_broker,
+            mqtt_port=args.mqtt_port,
+            mqtt_topic=args.mqtt_topic,
         )
     )
 
