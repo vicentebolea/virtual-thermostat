@@ -1,14 +1,14 @@
 # Virtual Thermostat
 
 A Python application for controlling smart plugs connected to air conditioners
-based on temperature sensor data. The AC turns on when temperature exceeds a
+based on MQTT temperature sensor data. The AC turns on when temperature exceeds a
 desired threshold, featuring a modern web-based controller interface with dark
-theme and real-time monitoring.
+theme, real-time monitoring, and built-in daemon mode.
 
 ## Features
 
 - **Smart AC Control**: Controls TP-Link Kasa smart plugs using the python-kasa library
-- **Temperature Monitoring**: Reads temperature data from local sensor files
+- **Temperature Monitoring**: Reads temperature data from MQTT brokers
 - **Modern Web Interface**: Dark-themed trame-based web interface with responsive design
 - **Real-time Auto-refresh**: Configurable automatic data refresh every 5 seconds
 - **Dual Temperature Units**: Support for both Celsius and Fahrenheit display with live conversion
@@ -17,8 +17,9 @@ theme and real-time monitoring.
 - **Cooldown Protection**: Configurable cooldown period to prevent frequent AC cycling
 - **State Management**: Maintains state between runs with persistent JSON files
 - **Real-time Control**: Enable/disable thermostat functionality via web interface
-- **DHT11 Sensor Support**: Built-in support for DHT11 temperature/humidity sensors
-- **MQTT Integration**: Publish temperature data to MQTT brokers for IoT integration
+- **DHT11 Sensor Support**: Built-in support for DHT11 temperature/humidity sensors with MQTT publishing
+- **MQTT-Only Architecture**: Pure MQTT-based communication for better IoT integration
+- **Built-in Daemon Mode**: Run continuously with configurable intervals (no separate daemon process needed)
 
 ## Installation
 
@@ -65,19 +66,16 @@ pip install .[control]
 
 ```bash
 # Run once using configuration file
-vthermostat-cli
+vthermostat-cli --config config/vthermostat_config.json
 
-# With custom config and state files
-vthermostat-cli --config custom_config.json --state custom_state.json
+# Run as daemon with 60-second intervals (default)
+vthermostat-cli --config config/vthermostat_config.json --daemon
 
-# With custom temperature file
-vthermostat-cli --temp /path/to/temp_sensor.txt
+# Run as daemon with custom interval
+vthermostat-cli --config config/vthermostat_config.json --daemon --interval 30
 
-# With MQTT options (overrides config file)
-vthermostat-cli --mqtt-broker 192.168.1.50 --mqtt-port 1883 --mqtt-topic sensors/temperature
-
-# Force MQTT usage even if config has it disabled
-vthermostat-cli --mqtt-broker localhost --mqtt-topic home/temperature
+# Enable debug logging
+vthermostat-cli --config config/vthermostat_config.json --log-level INFO
 ```
 
 ### Web Controller
@@ -106,12 +104,17 @@ The web interface provides:
 
 ### Running as Daemon
 
+The CLI now includes built-in daemon functionality:
+
 ```bash
 # Start daemon with default 60s interval
-vthermostat-daemon
+vthermostat-cli --config config/vthermostat_config.json --daemon
 
-# Custom interval and config files
-vthermostat-daemon --interval 30 --config custom_config.json
+# Custom interval
+vthermostat-cli --config config/vthermostat_config.json --daemon --interval 30
+
+# With logging for monitoring
+vthermostat-cli --config config/vthermostat_config.json --daemon --interval 60 --log-level INFO
 ```
 
 ### Docker Deployment
@@ -135,7 +138,7 @@ docker-compose down
 **Docker Services:**
 - **mqtt**: Eclipse Mosquitto MQTT broker (ports 1883, 9001)
 - **dht11**: DHT11 sensor reader (publishes to MQTT)
-- **daemon**: Thermostat daemon (subscribes to MQTT for temperature)
+- **thermostat**: Thermostat daemon (subscribes to MQTT for temperature)
 - **ui**: Web interface
 
 **MQTT Integration:**
@@ -153,11 +156,11 @@ See [DOCKER.md](DOCKER.md) for detailed Docker deployment guide.
 {
   "host": "192.168.1.100",
   "desired_temperature": 24.0,
-  "temp_file": "data/temp_sensor.txt",
   "state_file": "config/vthermostat_state.json",
   "cooldown_minutes": 15,
+  "enabled": true,
   "mqtt": {
-    "enabled": false,
+    "enabled": true,
     "broker": "localhost",
     "port": 1883,
     "topic": "thermostat/temperature"
@@ -168,11 +171,11 @@ See [DOCKER.md](DOCKER.md) for detailed Docker deployment guide.
 **Configuration Options:**
 - `host`: IP address of the smart plug
 - `desired_temperature`: Target temperature threshold (°C) - AC turns on when current temperature exceeds this value
-- `temp_file`: Path to temperature sensor file
 - `state_file`: Path to state persistence file
 - `cooldown_minutes`: Minimum time between AC state changes (default: 15)
-- `mqtt`: MQTT configuration object
-  - `enabled`: Enable/disable MQTT publishing
+- `enabled`: Enable/disable thermostat operation (default: true)
+- `mqtt`: MQTT configuration object (required)
+  - `enabled`: Must be `true` for thermostat operation
   - `broker`: MQTT broker hostname or IP
   - `port`: MQTT broker port (default: 1883)
   - `topic`: MQTT topic for temperature data
@@ -189,16 +192,7 @@ The state file automatically tracks:
 
 ## Temperature Sources
 
-### File-based Sensor
-
-The application can read temperature from a text file containing the temperature value in Celsius:
-
-```
-# data/temp_sensor.txt
-25
-```
-
-### DHT11 Sensor with MQTT Support
+### DHT11 Sensor with MQTT Publishing
 
 The DHT11 sensor reader uses modern Adafruit CircuitPython libraries and supports both hardware sensors and simulation mode. MQTT publishing is configured via CLI arguments.
 
@@ -211,26 +205,23 @@ The DHT11 sensor reader uses modern Adafruit CircuitPython libraries and support
 - Robust error handling for sensor reading failures
 
 ```bash
-# Basic usage - continuous reading from GPIO pin 4
-vthermostat-dht11
+# Basic usage - continuous reading from GPIO pin 4 (MQTT broker required)
+vthermostat-dht11 --mqtt-broker localhost
 
 # Single reading with verbose output
-vthermostat-dht11 --once --verbose
+vthermostat-dht11 --mqtt-broker localhost --once --log-level DEBUG
 
-# Custom GPIO pin and output file
-vthermostat-dht11 --pin 18 --output /tmp/temperature.txt
-
-# Custom reading interval (30 seconds default)
-vthermostat-dht11 --interval 60
+# Custom GPIO pin and interval
+vthermostat-dht11 --mqtt-broker localhost --pin 18 --interval 60
 
 # MQTT publishing to custom broker
 vthermostat-dht11 --mqtt-broker 192.168.1.50 --mqtt-port 1883 --mqtt-topic home/sensors/temperature
 
 # Simulation mode (no hardware required)
-vthermostat-dht11 --simulate --once --verbose
+vthermostat-dht11 --mqtt-broker localhost --simulate --once
 
 # Production example with MQTT
-vthermostat-dht11 --pin 4 --interval 30 --mqtt-broker homeassistant.local --mqtt-topic thermostat/dht11
+vthermostat-dht11 --mqtt-broker homeassistant.local --pin 4 --interval 30 --mqtt-topic thermostat/dht11
 ```
 
 **MQTT Payload Format:**
@@ -275,16 +266,13 @@ The thermostat uses simple threshold control with hysteresis:
 All commands support `--help` to see available options:
 
 ```bash
-# CLI thermostat (with MQTT support)
+# CLI thermostat (with daemon mode)
 vthermostat-cli --help
 
 # Web interface (shows both app and trame options)
 vthermostat-ui --help
 
-# Daemon service
-vthermostat-daemon --help
-
-# DHT11 sensor reader (with MQTT CLI options)
+# DHT11 sensor reader (MQTT-only)
 vthermostat-dht11 --help
 ```
 
@@ -322,15 +310,12 @@ flake8 .
 virtual-thermostat/
 ├── virtual_thermostat/
 │   ├── __init__.py
-│   ├── cli.py          # Command-line interface
+│   ├── cli.py          # Command-line interface with daemon mode
 │   ├── ui.py           # Web interface
-│   ├── daemon.py       # Background service
-│   └── dht11.py        # DHT11 sensor reader
+│   └── dht11.py        # DHT11 sensor reader (MQTT-only)
 ├── config/             # Configuration files
 │   ├── vthermostat_config.json
 │   └── vthermostat_state.json
-├── data/               # Runtime data
-│   └── temp_sensor.txt
 ├── tests/
 │   └── test_*.py
 ├── docker-compose.yml  # Docker deployment
@@ -343,7 +328,7 @@ virtual-thermostat/
 ### Common Issues
 
 1. **Smart plug not responding**: Check network connectivity and IP address
-2. **Temperature file not found**: Verify temp_file path in configuration
+2. **MQTT connection failed**: Verify MQTT broker is running and accessible
 3. **Web interface not loading**: Check port availability and firewall settings
 4. **DHT11 sensor errors**: Check GPIO pin connections, permissions, and ensure using supported pins (4, 17, 18, 22, 23, 24, 25, 27)
 5. **CircuitPython warnings**: Generic platform warnings are normal on non-Raspberry Pi systems when using simulation mode
@@ -364,4 +349,4 @@ MIT License
 
 ## Authors
 
-- Vicente Bolea -- @vicentebolea
+- Vicente Bolea -- https://github.com/vicentebolea

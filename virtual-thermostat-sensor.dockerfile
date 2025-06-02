@@ -17,6 +17,7 @@ RUN apk update && \
 
 COPY . /opt/virtual-thermostat
 WORKDIR /opt/virtual-thermostat
+RUN pip install --verbose --config-settings="--build-option=--force-pi2" Adafruit-DHT
 RUN pip install --verbose '.[sensor]'
 
 # Default to CLI, but allow override

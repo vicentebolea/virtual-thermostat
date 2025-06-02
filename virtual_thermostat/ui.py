@@ -56,18 +56,15 @@ def load_state(state_file=DEFAULT_STATE_FILE):
     """Load state from file."""
     state_path = Path(state_file)
     if not state_path.exists():
-        return {"last_ac_state": False, "last_run": None, "enabled": True}
+        return {"last_ac_state": False, "last_run": None}
 
     try:
         with open(state_path, "r") as f:
             state = json.load(f)
-            # Ensure enabled field exists for backward compatibility
-            if "enabled" not in state:
-                state["enabled"] = True
             return state
     except (json.JSONDecodeError, IOError) as e:
         logger.error(f"Error loading state: {e}")
-        return {"last_ac_state": False, "last_run": None, "enabled": True}
+        return {"last_ac_state": False, "last_run": None}
 
 
 def save_state(state, state_file=DEFAULT_STATE_FILE):
@@ -166,7 +163,7 @@ class ThermostatController:
 
         self.state.update(
             {
-                "enabled": self.current_state.get("enabled", True),
+                "enabled": self.config.get("enabled", True),
                 "last_ac_state": self.current_state.get("last_ac_state", False),
                 "last_run": self.current_state.get("last_run", "Never"),
                 "last_temperature": last_temp_display,
@@ -187,11 +184,11 @@ class ThermostatController:
 
     def on_enabled_change(self, enabled, **kwargs):
         """Handle enabled/disabled toggle."""
-        self.current_state["enabled"] = enabled
-        if save_state(self.current_state, self.state_file):
+        self.config["enabled"] = enabled
+        if self.save_config():
             logger.info(f"Thermostat {'enabled' if enabled else 'disabled'}")
         else:
-            logger.error("Failed to save state")
+            logger.error("Failed to save config")
 
     def on_desired_temperature_change(self, desired_temperature_display, **kwargs):
         """Handle desired temperature change (convert from display unit to Celsius)."""
@@ -332,9 +329,9 @@ class ThermostatController:
                                                 v_model=(
                                                     "desired_temperature_display",
                                                 ),
-                                                min=10,
-                                                max=35,
-                                                step=0.5,
+                                                min=18,
+                                                max=30,
+                                                step=1.0,
                                                 thumb_label=True,
                                                 color="primary",
                                             )
@@ -391,7 +388,7 @@ class ThermostatController:
                                             vuetify.VSlider(
                                                 v_model=("cooldown_minutes",),
                                                 min=1,
-                                                max=60,
+                                                max=15,
                                                 step=1,
                                                 thumb_label=True,
                                                 color="secondary",

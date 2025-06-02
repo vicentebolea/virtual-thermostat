@@ -15,7 +15,6 @@ requires-python = ">=3.8"
 [project.scripts]
 vthermostat-cli = "virtual_thermostat.cli:cli_main"
 vthermostat-ui = "virtual_thermostat.ui:main"
-vthermostat-daemon = "virtual_thermostat.daemon:main"
 vthermostat-dht11 = "virtual_thermostat.dht11:main"
 
 [tool.setuptools]
@@ -24,7 +23,7 @@ packages = ["virtual_thermostat"]
 [tool.black]
 line-length = 88
 target-version = ["py38", "py39", "py310", "py311"]
-include = 'virtual_thermostat/.*\.pyi?$'
+include = 'tests/.*\.pyi?$|virtual_thermostat/.*\.pyi?$'
 
 [tool.isort]
 profile = "black"
@@ -37,13 +36,13 @@ control = [
     "trame-vuetify",
     "trame-server",
     "paho-mqtt",
+    "click",
 ]
 
 sensor = [
     "paho-mqtt",
-    "adafruit-circuitpython-dht",
-    "board",
-    "RPi.GPIO",
+    "Adafruit-DHT",
+    "click",
 ]
 
 dev = [

@@ -1,165 +1,176 @@
 import json
 import tempfile
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 import pytest
+import unittest.mock
 
-from virtual_thermostat.cli import MQTTTemperatureReader, read_temperature
-
-
-def test_mqtt_temperature_reader_init():
-    """Test MQTTTemperatureReader initialization."""
-    reader = MQTTTemperatureReader("localhost", 1883, "test/topic", timeout=5)
-    assert reader.broker == "localhost"
-    assert reader.port == 1883
-    assert reader.topic == "test/topic"
-    assert reader.timeout == 5
-    assert reader.temperature is None
-    assert reader.last_update is None
+# Mock Adafruit_DHT to disable hardware dependency in tests
+with unittest.mock.patch.dict(
+    "sys.modules", {"Adafruit_DHT": unittest.mock.MagicMock()}
+):
+    from virtual_thermostat.cli import VirtualThermostat
 
 
-def test_read_temperature_file_fallback():
-    """Test read_temperature falls back to file when MQTT disabled."""
-    # Create temporary file with temperature
-    with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
-        temp_file.write("23")
-        temp_file_path = temp_file.name
-    
+def test_virtual_thermostat_init():
+    """Test VirtualThermostat initialization."""
+    config_data = {
+        "host": "192.168.1.100",
+        "desired_temperature": 24.0,
+        "state_file": "/tmp/test_state.json",
+        "cooldown_minutes": 15,
+        "mqtt": {
+            "enabled": True,
+            "broker": "localhost",
+            "port": 1883,
+            "topic": "thermostat/temperature",
+        },
+    }
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False
+    ) as config_file:
+        json.dump(config_data, config_file)
+        config_file_path = config_file.name
+
     try:
-        # Test with MQTT disabled
-        mqtt_config = {"enabled": False}
-        temperature = read_temperature(temp_file_path, mqtt_config)
-        assert temperature == 23
-        
-        # Test with no MQTT config
-        temperature = read_temperature(temp_file_path, None)
-        assert temperature == 23
-        
+        thermostat = VirtualThermostat(config_file_path)
+        assert thermostat.config["host"] == "192.168.1.100"
+        assert thermostat.config["desired_temperature"] == 24.0
+        assert thermostat.config["mqtt"]["enabled"] == True
+        assert thermostat.state["last_ac_state"] == False
     finally:
-        os.unlink(temp_file_path)
+        os.unlink(config_file_path)
 
 
-def test_read_temperature_file_only():
-    """Test read_temperature with file only (no MQTT config)."""
-    with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
-        temp_file.write("26")
-        temp_file_path = temp_file.name
-    
+def test_read_temperature_mqtt_disabled():
+    """Test that MQTT disabled raises exception."""
+    config_data = {
+        "host": "192.168.1.100",
+        "desired_temperature": 24.0,
+        "state_file": "/tmp/test_state.json",
+        "mqtt": {"enabled": False},
+    }
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False
+    ) as config_file:
+        json.dump(config_data, config_file)
+        config_file_path = config_file.name
+
     try:
-        temperature = read_temperature(temp_file_path)
-        assert temperature == 26
+        thermostat = VirtualThermostat(config_file_path)
+        with pytest.raises(Exception):  # Should raise ClickException
+            thermostat._read_temperature()
     finally:
-        os.unlink(temp_file_path)
+        os.unlink(config_file_path)
 
 
-def test_read_temperature_file_error():
-    """Test read_temperature handles file errors gracefully."""
-    # Non-existent file
-    temperature = read_temperature("/nonexistent/file.txt")
-    assert temperature is None
-    
-    # Invalid file content
-    with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
-        temp_file.write("not_a_number")
-        temp_file_path = temp_file.name
-    
+def test_read_temperature_mqtt_failure():
+    """Test that MQTT connection failure returns None."""
+    config_data = {
+        "host": "192.168.1.100",
+        "desired_temperature": 24.0,
+        "state_file": "/tmp/test_state.json",
+        "mqtt": {
+            "enabled": True,
+            "broker": "nonexistent.broker",
+            "port": 1883,
+            "topic": "thermostat/temperature",
+        },
+    }
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False
+    ) as config_file:
+        json.dump(config_data, config_file)
+        config_file_path = config_file.name
+
     try:
-        temperature = read_temperature(temp_file_path)
+        thermostat = VirtualThermostat(config_file_path)
+        temperature = thermostat._read_temperature()
         assert temperature is None
     finally:
-        os.unlink(temp_file_path)
+        os.unlink(config_file_path)
 
 
-@patch('virtual_thermostat.cli.HAS_MQTT_LIB', False)
-def test_read_temperature_mqtt_no_lib():
-    """Test read_temperature when MQTT library not available."""
-    with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
-        temp_file.write("22")
-        temp_file_path = temp_file.name
-    
+@patch("virtual_thermostat.cli.subscribe")
+def test_read_temperature_mqtt_success(mock_subscribe):
+    """Test successful MQTT temperature reading."""
+    # Mock successful MQTT message
+    mock_msg = MagicMock()
+    mock_msg.payload.decode.return_value = "25"
+    mock_subscribe.simple.return_value = mock_msg
+
+    config_data = {
+        "host": "192.168.1.100",
+        "desired_temperature": 24.0,
+        "state_file": "/tmp/test_state.json",
+        "mqtt": {
+            "enabled": True,
+            "broker": "localhost",
+            "port": 1883,
+            "topic": "thermostat/temperature",
+        },
+    }
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False
+    ) as config_file:
+        json.dump(config_data, config_file)
+        config_file_path = config_file.name
+
     try:
-        mqtt_config = {"enabled": True, "broker": "localhost"}
-        temperature = read_temperature(temp_file_path, mqtt_config)
-        # Should fall back to file when MQTT lib not available
-        assert temperature == 22
+        thermostat = VirtualThermostat(config_file_path)
+        with patch.object(thermostat, "_get_temperature_from_mqtt", return_value=25):
+            temperature = thermostat._read_temperature()
+            assert temperature == 25
     finally:
-        os.unlink(temp_file_path)
+        os.unlink(config_file_path)
 
 
-def test_mqtt_message_parsing():
-    """Test MQTT message parsing logic."""
-    reader = MQTTTemperatureReader("localhost", 1883, "test/topic")
-    
-    # Create mock message
-    mock_msg = MagicMock()
-    mock_msg.payload.decode.return_value = json.dumps({
-        "temperature": 24.5,
-        "humidity": 60.0,
-        "timestamp": "2025-01-01T12:00:00"
-    })
-    
-    # Test message parsing
-    reader._on_message(None, None, mock_msg)
-    assert reader.temperature == 24.5
-    assert reader.last_update is not None
-
-
-def test_mqtt_invalid_message():
-    """Test MQTT invalid message handling."""
-    reader = MQTTTemperatureReader("localhost", 1883, "test/topic")
-    
-    # Test invalid JSON
-    mock_msg = MagicMock()
-    mock_msg.payload.decode.return_value = "invalid json"
-    
-    reader._on_message(None, None, mock_msg)
-    assert reader.temperature is None
-    
-    # Test missing temperature field
-    mock_msg.payload.decode.return_value = json.dumps({"humidity": 60.0})
-    reader._on_message(None, None, mock_msg)
-    assert reader.temperature is None
-
-
-def test_cli_mqtt_override():
-    """Test that CLI arguments override config file MQTT settings."""
+def test_thermostat_run_with_mock():
+    """Test full thermostat run with mocked AC control."""
     import asyncio
-    from unittest.mock import patch, AsyncMock
-    from virtual_thermostat.cli import main
-    
-    # Mock the SmartPlug to avoid actual network calls
-    with patch('virtual_thermostat.cli.control_ac', new_callable=AsyncMock) as mock_control_ac:
-        mock_control_ac.return_value = True
-        
-        # Create temp file with temperature
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
-            temp_file.write("23")
-            temp_file_path = temp_file.name
-        
-        # Create config file with MQTT disabled
-        config_data = {
-            "host": "192.168.1.100",
-            "desired_temperature": 24.0,
-            "mqtt": {"enabled": False}
-        }
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as config_file:
-            json.dump(config_data, config_file)
-            config_file_path = config_file.name
-        
+
+    config_data = {
+        "host": "192.168.1.100",
+        "desired_temperature": 22.0,  # Low temp to trigger AC
+        "state_file": "/tmp/test_state.json",
+        "cooldown_minutes": 0,  # No cooldown for testing
+        "mqtt": {
+            "enabled": True,
+            "broker": "localhost",
+            "port": 1883,
+            "topic": "thermostat/temperature",
+        },
+    }
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False
+    ) as config_file:
+        json.dump(config_data, config_file)
+        config_file_path = config_file.name
+
+    try:
+        thermostat = VirtualThermostat(config_file_path)
+
+        # Mock both temperature reading and AC control
+        with patch.object(
+            thermostat, "_read_temperature", return_value=25
+        ), patch.object(
+            thermostat, "_control_ac", new_callable=AsyncMock, return_value=True
+        ) as mock_control_ac:
+
+            asyncio.run(thermostat.run_once())
+
+            # Should have called _control_ac with True since temp (25) > desired (22)
+            mock_control_ac.assert_called_once_with(True)
+
+    finally:
+        os.unlink(config_file_path)
+        # Clean up state file if created
         try:
-            # Test that CLI MQTT args enable MQTT despite config having it disabled
-            # This should try MQTT first, fail, then fallback to file
-            asyncio.run(main(
-                config_file=config_file_path,
-                temp_file=temp_file_path,
-                mqtt_broker="nonexistent.broker",  # Will fail and fallback
-                mqtt_topic="test/topic"
-            ))
-            
-            # Should have called control_ac since temperature reading succeeded
-            assert mock_control_ac.called
-            
-        finally:
-            os.unlink(temp_file_path)
-            os.unlink(config_file_path)
+            os.unlink("/tmp/test_state.json")
+        except FileNotFoundError:
+            pass
