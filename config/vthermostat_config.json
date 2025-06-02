@@ -3,5 +3,11 @@
   "desired_temperature": 24.0,
   "temp_file": "data/temp_sensor.txt",
   "state_file": "config/vthermostat_state.json",
-  "cooldown_minutes": 15
+  "cooldown_minutes": 15,
+  "mqtt": {
+    "enabled": false,
+    "broker": "localhost",
+    "port": 1883,
+    "topic": "thermostat/temperature"
+  }
 }

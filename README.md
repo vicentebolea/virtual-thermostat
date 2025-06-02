@@ -18,6 +18,7 @@ theme and real-time monitoring.
 - **State Management**: Maintains state between runs with persistent JSON files
 - **Real-time Control**: Enable/disable thermostat functionality via web interface
 - **DHT11 Sensor Support**: Built-in support for DHT11 temperature/humidity sensors
+- **MQTT Integration**: Publish temperature data to MQTT brokers for IoT integration
 
 ## Installation
 
@@ -42,6 +43,22 @@ pip install -e .[dev]
 pip install .
 ```
 
+### Sensor Installation (DHT11 + MQTT)
+
+For installations that need DHT11 sensor and MQTT support (uses modern CircuitPython libraries):
+
+```bash
+pip install .[sensor]
+```
+
+### Control Installation (Web UI + CLI)
+
+For installations that only need the thermostat control features:
+
+```bash
+pip install .[control]
+```
+
 ## Usage
 
 ### Temperature Control Script
@@ -55,6 +72,9 @@ vthermostat-cli --config custom_config.json --state custom_state.json
 
 # With custom temperature file
 vthermostat-cli --temp /path/to/temp_sensor.txt
+
+# With MQTT options
+vthermostat-cli --mqtt-broker 192.168.1.50 --mqtt-port 1883 --mqtt-topic sensors/temperature
 ```
 
 ### Web Controller
@@ -118,7 +138,13 @@ See [DOCKER.md](DOCKER.md) for detailed Docker deployment guide.
   "desired_temperature": 24.0,
   "temp_file": "data/temp_sensor.txt",
   "state_file": "config/vthermostat_state.json",
-  "cooldown_minutes": 15
+  "cooldown_minutes": 15,
+  "mqtt": {
+    "enabled": false,
+    "broker": "localhost",
+    "port": 1883,
+    "topic": "thermostat/temperature"
+  }
 }
 ```
 
@@ -128,6 +154,11 @@ See [DOCKER.md](DOCKER.md) for detailed Docker deployment guide.
 - `temp_file`: Path to temperature sensor file
 - `state_file`: Path to state persistence file
 - `cooldown_minutes`: Minimum time between AC state changes (default: 15)
+- `mqtt`: MQTT configuration object
+  - `enabled`: Enable/disable MQTT publishing
+  - `broker`: MQTT broker hostname or IP
+  - `port`: MQTT broker port (default: 1883)
+  - `topic`: MQTT topic for temperature data
 
 ### State File (`config/vthermostat_state.json`)
 
@@ -150,19 +181,48 @@ The application can read temperature from a text file containing the temperature
 25
 ```
 
-### DHT11 Sensor
+### DHT11 Sensor with MQTT Support
 
-Use the built-in DHT11 sensor reader to collect data from hardware sensors:
+The DHT11 sensor reader uses modern Adafruit CircuitPython libraries and supports both hardware sensors and simulation mode. MQTT publishing is configured via CLI arguments.
+
+**Key Features:**
+- Class-based architecture for better code organization
+- Modern CircuitPython DHT library (`adafruit-circuitpython-dht`)
+- Automatic hardware detection and graceful simulation fallback
+- Built-in MQTT publishing with JSON payload
+- Supports common Raspberry Pi GPIO pins (4, 17, 18, 22, 23, 24, 25, 27)
+- Robust error handling for sensor reading failures
 
 ```bash
-# Read DHT11 sensor and write to default file
+# Basic usage - continuous reading from GPIO pin 4
 vthermostat-dht11
 
-# Write to custom file with custom interval
-vthermostat-dht11 --output data/temp_data.txt --interval 10
+# Single reading with verbose output
+vthermostat-dht11 --once --verbose
 
-# Specify GPIO pin (default: 4)
-vthermostat-dht11 --pin 18
+# Custom GPIO pin and output file
+vthermostat-dht11 --pin 18 --output /tmp/temperature.txt
+
+# Custom reading interval (30 seconds default)
+vthermostat-dht11 --interval 60
+
+# MQTT publishing to custom broker
+vthermostat-dht11 --mqtt-broker 192.168.1.50 --mqtt-port 1883 --mqtt-topic home/sensors/temperature
+
+# Simulation mode (no hardware required)
+vthermostat-dht11 --simulate --once --verbose
+
+# Production example with MQTT
+vthermostat-dht11 --pin 4 --interval 30 --mqtt-broker homeassistant.local --mqtt-topic thermostat/dht11
+```
+
+**MQTT Payload Format:**
+```json
+{
+  "temperature": 23.5,
+  "humidity": 65.2,
+  "timestamp": "2025-01-01T12:30:45.123456"
+}
 ```
 
 ## How It Works
@@ -198,7 +258,7 @@ The thermostat uses simple threshold control with hysteresis:
 All commands support `--help` to see available options:
 
 ```bash
-# CLI thermostat
+# CLI thermostat (with MQTT support)
 vthermostat-cli --help
 
 # Web interface (shows both app and trame options)
@@ -206,6 +266,9 @@ vthermostat-ui --help
 
 # Daemon service
 vthermostat-daemon --help
+
+# DHT11 sensor reader (with MQTT CLI options)
+vthermostat-dht11 --help
 ```
 
 ## Development
@@ -265,7 +328,8 @@ virtual-thermostat/
 1. **Smart plug not responding**: Check network connectivity and IP address
 2. **Temperature file not found**: Verify temp_file path in configuration
 3. **Web interface not loading**: Check port availability and firewall settings
-4. **DHT11 sensor errors**: Check GPIO pin connections and permissions
+4. **DHT11 sensor errors**: Check GPIO pin connections, permissions, and ensure using supported pins (4, 17, 18, 22, 23, 24, 25, 27)
+5. **CircuitPython warnings**: Generic platform warnings are normal on non-Raspberry Pi systems when using simulation mode
 
 ### Logging
 

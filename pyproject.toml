@@ -11,12 +11,6 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = [
-    "python-kasa",
-    "trame",
-    "trame-vuetify",
-    "trame-server",
-]
 
 [project.scripts]
 vthermostat-cli = "virtual_thermostat.cli:cli_main"
@@ -37,12 +31,24 @@ profile = "black"
 line_length = 88
 
 [project.optional-dependencies]
+control = [
+    "python-kasa",
+    "trame",
+    "trame-vuetify",
+    "trame-server",
+    "paho-mqtt",
+]
+
+sensor = [
+    "paho-mqtt",
+    "adafruit-circuitpython-dht",
+    "board",
+]
+
 dev = [
+    "virtual-thermostat[control,sensor]",
     "black",
     "isort",
     "flake8",
     "pytest",
-]
-hardware = [
-    "Adafruit-DHT",
 ]

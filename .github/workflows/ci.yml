@@ -64,7 +64,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pytest
-          pip install -e .
+          pip install -e '.[dev]'
 
       - name: Run smoke tests
         run: |
@@ -86,6 +86,7 @@ jobs:
            - base-img: "self-hosted"
              target_arch: "armv6l"
              arch_params: --build-arg=TARGETARCH=arm --platform=linux/arm/v6
+             flavor: "-sensor"
 
     runs-on: ${{ matrix.base-img }}
     steps:
@@ -93,6 +94,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Podman
+        if: ${{ matrix.base-img != 'self-hosted' }}
         run: |
           sudo apt-get update
           sudo apt-get install -y podman
@@ -110,12 +112,12 @@ jobs:
           ARCH="${{ matrix.target_arch }}"
           [ -z "${ARCH}" ] && ARCH="$(uname -m)"
           # Build the image
-          podman build ${{ matrix.arch_params }} -t "ghcr.io/${{ github.repository }}/virtual-thermostat-${ARCH}:latest" \
-                       -t "ghcr.io/${{ github.repository }}/virtual-thermostat-${ARCH}:${{ github.sha }}" \
-                       -t "ghcr.io/${{ github.repository }}/virtual-thermostat-${ARCH}:${{ steps.slug.outputs.SHORT_SHA }}" \
-                       -f ./virtual-thermostat.dockerfile .
+          podman build ${{ matrix.arch_params }} -t "ghcr.io/${{ github.repository }}/virtual-thermostat${{ matrix.flavor }}-${ARCH}:latest" \
+                       -t "ghcr.io/${{ github.repository }}/virtual-thermostat${{ matrix.flavor }}-${ARCH}:${{ github.sha }}" \
+                       -t "ghcr.io/${{ github.repository }}/virtual-thermostat${{ matrix.flavor }}-${ARCH}:${{ steps.slug.outputs.SHORT_SHA }}" \
+                       -f ./virtual-thermostat${{ matrix.flavor }}.dockerfile .
 
           # Push all tags
-          podman push "ghcr.io/${{ github.repository }}/virtual-thermostat-${ARCH}:latest"
-          podman push "ghcr.io/${{ github.repository }}/virtual-thermostat-${ARCH}:${{ github.sha }}"
-          podman push "ghcr.io/${{ github.repository }}/virtual-thermostat-${ARCH}:${{ steps.slug.outputs.SHORT_SHA }}"
+          podman push "ghcr.io/${{ github.repository }}/virtual-thermostat${{ matrix.flavor }}-${ARCH}:latest"
+          podman push "ghcr.io/${{ github.repository }}/virtual-thermostat${{ matrix.flavor }}-${ARCH}:${{ github.sha }}"
+          podman push "ghcr.io/${{ github.repository }}/virtual-thermostat${{ matrix.flavor }}-${ARCH}:${{ steps.slug.outputs.SHORT_SHA }}"

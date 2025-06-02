@@ -10,10 +10,19 @@ import asyncio
 import json
 import logging
 import sys
+import threading
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from kasa import SmartPlug
+
+try:
+    import paho.mqtt.client as mqtt
+
+    HAS_MQTT_LIB = True
+except ImportError:
+    HAS_MQTT_LIB = False
 
 logger = logging.getLogger("simple-thermostat")
 
@@ -30,6 +39,12 @@ def create_default_config(config_file, host=None):
         "temp_file": "data/temp_sensor.txt",
         "state_file": "config/vthermostat_state.json",
         "cooldown_minutes": 15,
+        "mqtt": {
+            "enabled": False,
+            "broker": "localhost",
+            "port": 1883,
+            "topic": "thermostat/temperature",
+        },
     }
 
     config_path = Path(config_file)
@@ -60,12 +75,136 @@ def read_config(config_file=DEFAULT_CONFIG_FILE, host=None):
         sys.exit(1)
 
 
-def read_temperature(temp_file=DEFAULT_TEMP_FILE):
-    """Read temperature from system file in whole units of Celsius."""
+class MQTTTemperatureReader:
+    """MQTT temperature reader that subscribes to sensor data."""
+
+    def __init__(self, broker, port, topic, timeout=10):
+        """Initialize MQTT temperature reader.
+
+        Args:
+            broker: MQTT broker hostname/IP
+            port: MQTT broker port
+            topic: MQTT topic to subscribe to
+            timeout: Timeout in seconds for receiving temperature data
+        """
+        self.broker = broker
+        self.port = port
+        self.topic = topic
+        self.timeout = timeout
+        self.temperature = None
+        self.last_update = None
+        self.client = None
+        self._lock = threading.Lock()
+
+    def _on_connect(self, client, userdata, flags, rc):
+        """Callback for when the client receives a CONNACK response."""
+        if rc == 0:
+            logger.debug(f"Connected to MQTT broker {self.broker}:{self.port}")
+            client.subscribe(self.topic)
+            logger.debug(f"Subscribed to topic {self.topic}")
+        else:
+            logger.error(f"Failed to connect to MQTT broker: {rc}")
+
+    def _on_message(self, client, userdata, msg):
+        """Callback for when a message is received."""
+        try:
+            payload = json.loads(msg.payload.decode())
+            temperature = payload.get("temperature")
+
+            if temperature is not None:
+                with self._lock:
+                    self.temperature = float(temperature)
+                    self.last_update = datetime.now()
+                    logger.debug(f"Received temperature via MQTT: {temperature}°C")
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            logger.warning(f"Invalid MQTT message format: {e}")
+
+    def get_temperature(self):
+        """Get the latest temperature reading from MQTT.
+
+        Returns:
+            int: Temperature in Celsius (rounded) or None if no recent data
+        """
+        if not HAS_MQTT_LIB:
+            logger.error("paho-mqtt library not available")
+            return None
+
+        try:
+            # Create and configure MQTT client
+            self.client = mqtt.Client()
+            self.client.on_connect = self._on_connect
+            self.client.on_message = self._on_message
+
+            # Connect to broker
+            self.client.connect(self.broker, self.port, 60)
+
+            # Start the loop in a separate thread
+            self.client.loop_start()
+
+            # Wait for temperature data with timeout
+            start_time = time.time()
+            while time.time() - start_time < self.timeout:
+                with self._lock:
+                    if self.temperature is not None:
+                        # Return rounded temperature (as expected by thermostat)
+                        temp_celsius = round(self.temperature)
+                        self.client.loop_stop()
+                        self.client.disconnect()
+                        return temp_celsius
+                time.sleep(0.1)
+
+            # Timeout reached
+            self.client.loop_stop()
+            self.client.disconnect()
+            logger.error(f"Timeout waiting for MQTT temperature data from {self.topic}")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error reading temperature via MQTT: {e}")
+            if self.client:
+                self.client.loop_stop()
+                self.client.disconnect()
+            return None
+
+
+def read_temperature(temp_file=DEFAULT_TEMP_FILE, mqtt_config=None):
+    """Read temperature from MQTT or file source.
+
+    Args:
+        temp_file: Path to temperature file (fallback)
+        mqtt_config: MQTT configuration dict (if enabled)
+
+    Returns:
+        int: Temperature in Celsius or None if error
+    """
+    # Try MQTT first if enabled
+    if mqtt_config and mqtt_config.get("enabled", False):
+        if not HAS_MQTT_LIB:
+            logger.warning(
+                "MQTT enabled but paho-mqtt not available, falling back to file"
+            )
+        else:
+            broker = mqtt_config.get("broker", "localhost")
+            port = mqtt_config.get("port", 1883)
+            topic = mqtt_config.get("topic", "thermostat/temperature")
+
+            mqtt_reader = MQTTTemperatureReader(broker, port, topic)
+            temperature = mqtt_reader.get_temperature()
+
+            if temperature is not None:
+                logger.info(f"Temperature from MQTT: {temperature}°C")
+                return temperature
+            else:
+                logger.warning(
+                    "Failed to get temperature from MQTT, falling back to file"
+                )
+
+    # Fallback to file reading
     try:
         with open(temp_file, "r") as f:
             # System thermal files are in whole units of Celsius
             temp_celsius = int(f.read().strip())
+            logger.debug(f"Temperature from file: {temp_celsius}°C")
             return temp_celsius
     except (IOError, ValueError) as e:
         logger.error(f"Error reading temperature from {temp_file}: {e}")
@@ -176,8 +315,9 @@ async def main(config_file=None, state_file=None, temp_file=None, host=None):
     temp_file = temp_file or config.get("temp_file", DEFAULT_TEMP_FILE)
     state_file = state_file or config.get("state_file", DEFAULT_STATE_FILE)
 
-    # Read current temperature
-    temperature = read_temperature(temp_file)
+    # Read current temperature (MQTT or file)
+    mqtt_config = config.get("mqtt", {})
+    temperature = read_temperature(temp_file, mqtt_config)
     if temperature is None:
         logger.error("Could not read temperature")
         sys.exit(1)
@@ -273,6 +413,20 @@ def parse_args():
     parser.add_argument(
         "--host",
         help="Smart plug host IP address (used when creating default config)",
+    )
+    parser.add_argument(
+        "--mqtt-broker",
+        help="MQTT broker host address",
+    )
+    parser.add_argument(
+        "--mqtt-port",
+        type=int,
+        default=1883,
+        help="MQTT broker port (default: 1883)",
+    )
+    parser.add_argument(
+        "--mqtt-topic",
+        help="MQTT topic for temperature publishing",
     )
     return parser.parse_args()
 

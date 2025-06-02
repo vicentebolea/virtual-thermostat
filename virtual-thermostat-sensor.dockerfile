@@ -5,9 +5,7 @@ FROM --platform=linux/arm/v6 docker.io/arm32v6/python:3-alpine AS base-arm
 
 FROM base-${TARGETARCH}
 
-ARG TARGETARCH
-RUN if [ "${TARGETARCH}" = "arm" ]; then \
-      apk update && \
+RUN apk update && \
       apk add \
         cargo \
         g++ \
@@ -15,14 +13,11 @@ RUN if [ "${TARGETARCH}" = "arm" ]; then \
         libffi-dev \
         openssl-dev \
         rust \
-        ; \
-    fi
-
-RUN python3 -mpip install --verbose python-kasa
+        ""
 
 COPY . /opt/virtual-thermostat
 WORKDIR /opt/virtual-thermostat
-RUN pip install --verbose ".[control]"
+RUN pip install --verbose '.[sensor]'
 
 # Default to CLI, but allow override
 CMD [ "vthermostat-cli" ]
