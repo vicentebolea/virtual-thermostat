@@ -64,7 +64,7 @@ class DHT11Sensor:
 
         try:
             data = {
-                "temperature": round(temperature, 1),
+                "temperature": temperature,
                 "humidity": round(humidity, 1),
                 "timestamp": datetime.now().isoformat(),
             }

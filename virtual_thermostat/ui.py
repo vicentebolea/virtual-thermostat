@@ -14,6 +14,7 @@ from pathlib import Path
 from trame.app import get_server, asynchronous
 from trame.ui.vuetify import SinglePageLayout
 from trame.widgets import html, vuetify
+from kasa import SmartPlug
 
 # Configure logging
 logging.basicConfig(
@@ -248,6 +249,52 @@ class ThermostatController:
         """Save current config to file."""
         return save_config(self.config, self.config_file)
 
+    async def control_ac(self, turn_on):
+        """Control the AC via smart plug."""
+        host = self.config.get("host")
+        if not host:
+            logger.error("No host configured for smart plug")
+            return False
+
+        try:
+            plug = SmartPlug(host)
+            await plug.update()
+
+            current_state = plug.is_on
+            if current_state == turn_on:
+                logger.info(f"AC already {'ON' if turn_on else 'OFF'}")
+                return current_state
+
+            if turn_on:
+                await plug.turn_on()
+                logger.info("Manually turned AC ON")
+            else:
+                await plug.turn_off()
+                logger.info("Manually turned AC OFF")
+
+            # Update state
+            self.current_state["last_ac_state"] = turn_on
+            self.current_state["last_ac_change"] = datetime.now().isoformat()
+            save_state(self.current_state, self.state_file)
+
+            # Update UI state
+            with self.state:
+                self.state.last_ac_state = turn_on
+                self.state.ac_state_text = "ON" if turn_on else "OFF"
+
+            return turn_on
+        except Exception as e:
+            logger.error(f"Error controlling AC: {e}")
+            return False
+
+    def turn_ac_on(self, **kwargs):
+        """Turn AC on."""
+        asynchronous.create_task(self.control_ac(True))
+
+    def turn_ac_off(self, **kwargs):
+        """Turn AC off."""
+        asynchronous.create_task(self.control_ac(False))
+
     async def _update_points(self):
         with self.state:
             self.state.is_loading = True
@@ -319,6 +366,21 @@ class ThermostatController:
                                                 v_model=("enabled",),
                                                 label="Enable Thermostat",
                                                 color="primary",
+                                            )
+                                    with vuetify.VRow():
+                                        with vuetify.VCol(cols=12, sm=6, md=3):
+                                            vuetify.VBtn(
+                                                "Turn AC ON",
+                                                click=self.turn_ac_on,
+                                                color="success",
+                                                block=True,
+                                            )
+                                        with vuetify.VCol(cols=12, sm=6, md=3):
+                                            vuetify.VBtn(
+                                                "Turn AC OFF",
+                                                click=self.turn_ac_off,
+                                                color="error",
+                                                block=True,
                                             )
                                     with vuetify.VRow():
                                         with vuetify.VCol(cols=12):

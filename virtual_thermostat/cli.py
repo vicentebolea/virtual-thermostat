@@ -81,7 +81,7 @@ class VirtualThermostat:
             temperature = self._get_temperature_from_mqtt(broker, port, topic)
             if temperature is not None:
                 logger.info(f"Temperature from MQTT: {temperature}°C")
-                return temperature
+                return int(temperature)
             return None
         except Exception as e:
             logger.error(f"Failed to get temperature from MQTT: {e}")
