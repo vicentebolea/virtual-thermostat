@@ -23,6 +23,7 @@ RUN python3 -mpip install --verbose python-kasa
 COPY . /opt/virtual-thermostat
 WORKDIR /opt/virtual-thermostat
 RUN pip install --verbose ".[control]"
+RUN pip install --verbose ".[sheets]"
 
 # Default to CLI, but allow override
 CMD [ "vthermostat-cli" ]

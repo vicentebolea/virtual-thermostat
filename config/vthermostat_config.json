@@ -9,5 +9,13 @@
     "broker": "localhost",
     "port": 1883,
     "topic": "thermostat/temperature"
-  }
+  },
+  "google_sheets": {
+    "enabled": false,
+    "credentials_file": "config/google_sheets_credentials.json",
+    "spreadsheet_id": "YOUR_SPREADSHEET_ID_HERE",
+    "worksheet_name": "Temperature_Data",
+    "upload_interval_minutes": 15
+  },
+  "device_name": "virtual-thermostat"
 }

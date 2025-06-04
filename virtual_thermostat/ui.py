@@ -112,6 +112,9 @@ class ThermostatController:
         # Initialize server state
         self.update_server_state()
 
+        # Enable dark theme
+        self.state.trame__template_main = {"vuetify": {"theme": {"dark": True}}}
+
         # Set up callbacks
         self.state.change("enabled")(self.on_enabled_change)
         self.state.change("desired_temperature_display")(
@@ -342,7 +345,7 @@ class ThermostatController:
 
     def create_ui(self):
         """Create the web UI."""
-        with SinglePageLayout(self.server, theme={"dark": True}) as layout:
+        with SinglePageLayout(self.server) as layout:
             layout.title.set_text("Virtual Thermostat Controller")
 
             with layout.content:

@@ -16,6 +16,7 @@ requires-python = ">=3.8"
 vthermostat-cli = "virtual_thermostat.cli:cli_main"
 vthermostat-ui = "virtual_thermostat.ui:main"
 vthermostat-dht11 = "virtual_thermostat.dht11:main"
+vthermostat-sheets = "virtual_thermostat.sheets_logger:cli_main"
 
 [tool.setuptools]
 packages = ["virtual_thermostat"]
@@ -45,8 +46,17 @@ sensor = [
     "click",
 ]
 
+sheets = [
+    "paho-mqtt",
+    "gspread",
+    "google-auth",
+    "google-auth-oauthlib",
+    "google-auth-httplib2",
+    "click",
+]
+
 dev = [
-    "virtual-thermostat[control,sensor]",
+    "virtual-thermostat[control,sensor,sheets]",
     "black",
     "isort",
     "flake8",

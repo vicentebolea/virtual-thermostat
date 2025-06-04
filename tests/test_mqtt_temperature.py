@@ -37,8 +37,8 @@ def test_virtual_thermostat_init():
         thermostat = VirtualThermostat(config_file_path)
         assert thermostat.config["host"] == "192.168.1.100"
         assert thermostat.config["desired_temperature"] == 24.0
-        assert thermostat.config["mqtt"]["enabled"] == True
-        assert thermostat.state["last_ac_state"] == False
+        assert thermostat.config["mqtt"]["enabled"] is True
+        assert thermostat.state["last_ac_state"] is False
     finally:
         os.unlink(config_file_path)
 
