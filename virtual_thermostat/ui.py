@@ -57,7 +57,7 @@ def load_state(state_file=DEFAULT_STATE_FILE):
     """Load state from file."""
     state_path = Path(state_file)
     if not state_path.exists():
-        return {"last_ac_state": False, "last_run": None}
+        return {"last_ac_state": False, "last_ac_change": None}
 
     try:
         with open(state_path, "r") as f:
@@ -65,7 +65,7 @@ def load_state(state_file=DEFAULT_STATE_FILE):
             return state
     except (json.JSONDecodeError, IOError) as e:
         logger.error(f"Error loading state: {e}")
-        return {"last_ac_state": False, "last_run": None}
+        return {"last_ac_state": False, "last_ac_change": None}
 
 
 def save_state(state, state_file=DEFAULT_STATE_FILE):
@@ -169,7 +169,7 @@ class ThermostatController:
             {
                 "enabled": self.config.get("enabled", True),
                 "last_ac_state": self.current_state.get("last_ac_state", False),
-                "last_run": self.current_state.get("last_run", "Never"),
+                "last_ac_change": self.current_state.get("last_ac_change", "Never"),
                 "last_temperature": last_temp_display,
                 "desired_temperature_display": self.get_display_temp(
                     desired_temperature_c
@@ -420,7 +420,9 @@ class ThermostatController:
                                             )
                                         with vuetify.VCol(cols=6):
                                             html.P("AC State: {{ ac_state_text }}")
-                                            html.P("Last Run: {{ last_run }}")
+                                            html.P(
+                                                "Last AC change: {{ last_ac_change }}"
+                                            )
                                             html.P(
                                                 "Last Refresh: {{ last_refresh }}",
                                                 style="font-size: 12px; color: #666;",

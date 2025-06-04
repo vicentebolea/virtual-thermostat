@@ -118,7 +118,7 @@ class SheetsLogger:
             port=port,
             msg_count=1,
             retained=True,
-            timeout=2,
+            timeout=15,
         )
 
         if msg is None:
@@ -287,7 +287,7 @@ class SheetsLogger:
         sensor_data_available = self._read_sensor_data()
         state_data_available = self._read_state_data()
 
-        if not sensor_data_available and not state_data_available:
+        if not sensor_data_available or not state_data_available:
             logger.warning("No sensor or state data available, skipping upload")
             return
 
