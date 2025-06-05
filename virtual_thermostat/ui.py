@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 from trame.app import get_server, asynchronous
-from trame.ui.vuetify import SinglePageLayout
+from trame.ui.vuetify import SinglePageWithDrawerLayout
 from trame.widgets import html, vuetify
 from kasa import SmartPlug
 
@@ -111,9 +111,6 @@ class ThermostatController:
 
         # Initialize server state
         self.update_server_state()
-
-        # Enable dark theme
-        self.state.trame__template_main = {"vuetify": {"theme": {"dark": True}}}
 
         # Set up callbacks
         self.state.change("enabled")(self.on_enabled_change)
@@ -345,8 +342,69 @@ class ThermostatController:
 
     def create_ui(self):
         """Create the web UI."""
-        with SinglePageLayout(self.server) as layout:
+        # Initialize drawer state as collapsed
+        self.state.main_drawer = False
+
+        with SinglePageWithDrawerLayout(self.server) as layout:
             layout.title.set_text("Virtual Thermostat Controller")
+
+            with layout.toolbar:
+                vuetify.VSpacer()
+                vuetify.VSwitch(
+                    v_model=("$vuetify.theme.dark"),
+                    hide_details=True,
+                    dense=True,
+                    label="Dark Mode",
+                )
+
+            with layout.drawer as drawer:
+                drawer.width = 300
+
+                with vuetify.VListItem():
+                    with vuetify.VListItemContent():
+                        vuetify.VListItemTitle(
+                            "Settings", style="font-size: 18px; font-weight: bold;"
+                        )
+                vuetify.VDivider()
+
+                # Display unit setting
+                with vuetify.VListItem():
+                    with vuetify.VListItemAction():
+                        vuetify.VSwitch(
+                            v_model=("display_fahrenheit",),
+                            color="secondary",
+                        )
+                    with vuetify.VListItemContent():
+                        vuetify.VListItemTitle("Display in Fahrenheit")
+                        vuetify.VListItemSubtitle("Toggle between °F and °C")
+
+                # Auto refresh setting
+                with vuetify.VListItem():
+                    with vuetify.VListItemAction():
+                        vuetify.VSwitch(
+                            v_model=("auto_refresh_enabled",),
+                            color="success",
+                        )
+                    with vuetify.VListItemContent():
+                        vuetify.VListItemTitle("Auto Refresh")
+                        vuetify.VListItemSubtitle(
+                            "Automatically refresh data every 5 seconds"
+                        )
+
+                # Cooldown setting
+                with vuetify.VListItem():
+                    with vuetify.VListItemContent():
+                        vuetify.VListItemTitle("Cooldown Time")
+                        vuetify.VListItemSubtitle("{{ cooldown_minutes }} minutes")
+                        vuetify.VSlider(
+                            v_model=("cooldown_minutes",),
+                            min=1,
+                            max=30,
+                            step=1,
+                            thumb_label=True,
+                            color="secondary",
+                            style="margin-top: 16px;",
+                        )
 
             with layout.content:
                 with vuetify.VContainer():
@@ -426,39 +484,6 @@ class ThermostatController:
                                             html.P(
                                                 "Last Refresh: {{ last_refresh }}",
                                                 style="font-size: 12px; color: #666;",
-                                            )
-
-                    # Control Card
-                    with vuetify.VRow():
-                        with vuetify.VCol():
-                            with vuetify.VCard():
-                                vuetify.VCardTitle("Settings")
-                                with vuetify.VCardText():
-                                    with vuetify.VRow():
-                                        with vuetify.VCol(cols=12, sm=6, md=4):
-                                            vuetify.VSwitch(
-                                                v_model=("display_fahrenheit",),
-                                                label="Display in Fahrenheit",
-                                                color="secondary",
-                                            )
-                                        with vuetify.VCol(cols=12, sm=12, md=4):
-                                            vuetify.VSwitch(
-                                                v_model=("auto_refresh_enabled",),
-                                                label="Auto Refresh",
-                                                color="success",
-                                            )
-                                    with vuetify.VRow():
-                                        with vuetify.VCol(cols=12):
-                                            html.Div(
-                                                "Cooldown Time: {{ cooldown_minutes }} minutes"
-                                            )
-                                            vuetify.VSlider(
-                                                v_model=("cooldown_minutes",),
-                                                min=1,
-                                                max=15,
-                                                step=1,
-                                                thumb_label=True,
-                                                color="secondary",
                                             )
 
     def start(self):

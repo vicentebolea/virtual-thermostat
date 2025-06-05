@@ -53,6 +53,7 @@ sheets = [
     "google-auth-oauthlib",
     "google-auth-httplib2",
     "click",
+    "requests",
 ]
 
 dev = [

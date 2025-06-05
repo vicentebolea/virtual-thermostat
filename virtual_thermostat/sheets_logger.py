@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 import click
 import paho.mqtt.subscribe as subscribe
 import gspread
+import requests
 from google.oauth2.service_account import Credentials
 
 logger = logging.getLogger("sheets-logger")
@@ -26,7 +27,11 @@ class SheetsLogger:
             self.config = json.load(f)
 
         self.last_upload = None
-        self.current_data = {"temperature": None, "humidity": None}
+        self.current_data = {
+            "temperature": None,
+            "humidity": None,
+            "outside_temperature": None,
+        }
         self.state_data = {}
         self.gc = None
         self.worksheet = None
@@ -78,6 +83,7 @@ class SheetsLogger:
                     "Timestamp",
                     "Temperature (°C)",
                     "Humidity (%)",
+                    "Outside Temp (°C)",
                     "Device",
                     "AC State",
                     "Last Run",
@@ -85,7 +91,7 @@ class SheetsLogger:
                     "Thermostat Enabled",
                     "Desired Temp (°C)",
                 ]
-                self.worksheet.update("A1:I1", [headers])
+                self.worksheet.update("A1:J1", [headers])
                 logger.info(f"Created new worksheet: {worksheet_name}")
 
             logger.info(
@@ -140,6 +146,34 @@ class SheetsLogger:
             except (ValueError, AttributeError):
                 return None, None
 
+    def _get_outside_temperature(self):
+        """Get outside temperature from wttr.in weather service."""
+        try:
+            # Use wttr.in with format %t to get just temperature
+            response = requests.get("http://wttr.in/?format=%t%m", timeout=5)
+            response.raise_for_status()
+
+            # Parse the response (format: "+15°C" or "-5°C")
+            temp_str = response.text.strip()
+            if temp_str.endswith("°C"):
+                temp_value = temp_str[:-2]  # Remove '°C'
+                # Remove leading '+' if present
+                if temp_value.startswith("+"):
+                    temp_value = temp_value[1:]
+                temperature = float(temp_value)
+                logger.debug(f"Outside temperature from wttr.in: {temperature}°C")
+                return temperature
+            else:
+                logger.warning(f"Unexpected format from wttr.in: {temp_str}")
+                return None
+
+        except requests.RequestException as e:
+            logger.warning(f"Failed to get outside temperature from wttr.in: {e}")
+            return None
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Failed to parse outside temperature: {e}")
+            return None
+
     def _read_sensor_data(self):
         """Read temperature and humidity from MQTT source."""
         mqtt_config = self.config.get("mqtt", {})
@@ -159,6 +193,11 @@ class SheetsLogger:
                 )
                 self.current_data["temperature"] = temperature
                 self.current_data["humidity"] = humidity
+
+                # Get outside temperature
+                outside_temp = self._get_outside_temperature()
+                self.current_data["outside_temperature"] = outside_temp
+
                 return True
             return False
         except Exception as e:
@@ -219,6 +258,7 @@ class SheetsLogger:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             temperature = self.current_data.get("temperature", "")
             humidity = self.current_data.get("humidity", "")
+            outside_temperature = self.current_data.get("outside_temperature", "")
             device = self.config.get("device_name", "virtual-thermostat")
 
             # State data
@@ -252,6 +292,7 @@ class SheetsLogger:
                 timestamp,
                 temperature,
                 humidity,
+                outside_temperature,
                 device,
                 ac_state,
                 last_run,
@@ -262,7 +303,7 @@ class SheetsLogger:
             self.worksheet.append_row(row_data)
 
             logger.info(
-                f"Uploaded to Google Sheets: {timestamp}, {temperature}°C, {humidity}%, AC: {ac_state}, Enabled: {thermostat_enabled}"
+                f"Uploaded to Google Sheets: {timestamp}, {temperature}°C, {humidity}%, Outside: {outside_temperature}°C, AC: {ac_state}, Enabled: {thermostat_enabled}"
             )
             self.last_upload = datetime.now()
             return True
