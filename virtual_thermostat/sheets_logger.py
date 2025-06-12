@@ -150,7 +150,7 @@ class SheetsLogger:
         """Get outside temperature from wttr.in weather service."""
         try:
             # Use wttr.in with format %t to get just temperature
-            response = requests.get("http://wttr.in/?format=%t%m", timeout=5)
+            response = requests.get("http://wttr.in/?m&format=%t", timeout=5)
             response.raise_for_status()
 
             # Parse the response (format: "+15°C" or "-5°C")
@@ -255,7 +255,7 @@ class SheetsLogger:
             return False
 
         try:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            timestamp = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
             temperature = self.current_data.get("temperature", "")
             humidity = self.current_data.get("humidity", "")
             outside_temperature = self.current_data.get("outside_temperature", "")
@@ -274,7 +274,7 @@ class SheetsLogger:
                     last_run_dt = datetime.fromisoformat(
                         last_run.replace("Z", "+00:00")
                     )
-                    last_run = last_run_dt.strftime("%Y-%m-%d %H:%M:%S")
+                    last_run = last_run_dt.strftime("%Y/%m/%d %H:%M:%S")
                 except (ValueError, TypeError):
                     pass  # Keep original format if parsing fails
 
@@ -283,7 +283,7 @@ class SheetsLogger:
                     last_ac_change_dt = datetime.fromisoformat(
                         last_ac_change.replace("Z", "+00:00")
                     )
-                    last_ac_change = last_ac_change_dt.strftime("%Y-%m-%d %H:%M:%S")
+                    last_ac_change = last_ac_change_dt.strftime("%Y/%m/%d %H:%M:%S")
                 except (ValueError, TypeError):
                     pass  # Keep original format if parsing fails
 

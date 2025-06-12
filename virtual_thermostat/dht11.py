@@ -87,7 +87,7 @@ class DHT11Sensor:
 
     def log_reading(self, temperature, humidity):
         """Log the sensor reading with timestamp."""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
         logger.info(
             f"[{timestamp}] Temperature: {temperature:.1f}°C, Humidity: {humidity:.1f}%"
         )
