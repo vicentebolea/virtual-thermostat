@@ -5,6 +5,9 @@ based on MQTT temperature sensor data. The AC turns on when temperature exceeds 
 desired threshold, featuring a modern web-based controller interface with dark
 theme, real-time monitoring, and built-in daemon mode.
 
+![Screenshot from 2025-06-11 22-10-11](https://github.com/user-attachments/assets/57d0fd05-22f2-4cf9-98eb-e68659a03e87)
+
+
 ## Features
 
 - **Smart AC Control**: Controls TP-Link Kasa smart plugs using the python-kasa library
