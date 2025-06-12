@@ -150,7 +150,7 @@ class SheetsLogger:
         """Get outside temperature from wttr.in weather service."""
         try:
             # Use wttr.in with format %t to get just temperature
-            response = requests.get("http://wttr.in/?format=%t%m", timeout=5)
+            response = requests.get("http://wttr.in/?m&format=%t", timeout=5)
             response.raise_for_status()
 
             # Parse the response (format: "+15°C" or "-5°C")
