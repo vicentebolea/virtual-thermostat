@@ -16,6 +16,7 @@ import paho.mqtt.subscribe as subscribe
 import gspread
 import requests
 from google.oauth2.service_account import Credentials
+from kasa import SmartPlug
 
 logger = logging.getLogger("sheets-logger")
 
@@ -33,6 +34,7 @@ class SheetsLogger:
             "outside_temperature": None,
         }
         self.state_data = {}
+        self.current_power = 0
         self.gc = None
         self.worksheet = None
 
@@ -76,9 +78,9 @@ class SheetsLogger:
             except gspread.WorksheetNotFound:
                 # Create worksheet if it doesn't exist
                 self.worksheet = spreadsheet.add_worksheet(
-                    title=worksheet_name, rows=1000, cols=10
+                    title=worksheet_name, rows=1000, cols=11
                 )
-                # Add headers including state file fields
+                # Add headers including state file fields and power usage
                 headers = [
                     "Timestamp",
                     "Temperature (°C)",
@@ -90,8 +92,9 @@ class SheetsLogger:
                     "Last AC Change",
                     "Thermostat Enabled",
                     "Desired Temp (°C)",
+                    "Power (W)",
                 ]
-                self.worksheet.update("A1:J1", [headers])
+                self.worksheet.update("A1:K1", [headers])
                 logger.info(f"Created new worksheet: {worksheet_name}")
 
             logger.info(
@@ -240,6 +243,35 @@ class SheetsLogger:
             }
             return False
 
+    async def _read_current_power(self):
+        """Read power consumption data directly from smart plug."""
+        host = self.config.get("host")
+        if not host:
+            logger.warning("No smart plug host configured")
+            self.current_power = 0
+            return False
+
+        try:
+            plug = SmartPlug(host)
+            await plug.update()
+
+            # Check AC state and record appropriate power consumption
+            if not plug.is_on:
+                logger.debug("AC is off, recording 0W power consumption")
+                return True
+
+            if plug.has_emeter:
+                emeter_data = plug.emeter_realtime
+                self.current_power = emeter_data.get("power", 0)
+                logger.debug(f"Power consumption: {self.current_power:.1f}W")
+                return True
+            else:
+                logger.debug("Smart plug does not support power monitoring")
+                return False
+        except Exception as e:
+            logger.error(f"Failed to get power data from smart plug: {e}")
+            return False
+
     def _should_upload(self, interval_minutes):
         """Check if it's time to upload data."""
         if self.last_upload is None:
@@ -287,7 +319,7 @@ class SheetsLogger:
                 except (ValueError, TypeError):
                     pass  # Keep original format if parsing fails
 
-            # Append row to the worksheet with all data
+            # Append row to the worksheet with all data including power usage
             row_data = [
                 timestamp,
                 temperature,
@@ -299,11 +331,12 @@ class SheetsLogger:
                 last_ac_change,
                 thermostat_enabled,
                 desired_temp,
+                self.current_power,
             ]
             self.worksheet.append_row(row_data)
 
             logger.info(
-                f"Uploaded to Google Sheets: {timestamp}, {temperature}°C, {humidity}%, Outside: {outside_temperature}°C, AC: {ac_state}, Enabled: {thermostat_enabled}"
+                f"Uploaded to Google Sheets: {timestamp}, {temperature}°C, {humidity}%, Outside: {outside_temperature}°C, AC: {ac_state}, Enabled: {thermostat_enabled}{self.current_power}"
             )
             self.last_upload = datetime.now()
             return True
@@ -324,9 +357,10 @@ class SheetsLogger:
 
         interval_minutes = sheets_config.get("upload_interval_minutes", 15)
 
-        # Read sensor data and state data
+        # Read sensor data, state data, and power data
         sensor_data_available = self._read_sensor_data()
         state_data_available = self._read_state_data()
+        await self._read_current_power()
 
         if not sensor_data_available or not state_data_available:
             logger.warning("No sensor or state data available, skipping upload")
