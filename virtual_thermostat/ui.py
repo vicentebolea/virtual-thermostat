@@ -256,8 +256,18 @@ class ThermostatController:
             logger.error("No host configured for smart plug")
             return False
 
+        kasa_username = self.config.get("kasa_username")
+        kasa_password = self.config.get("kasa_password")
+
         try:
-            plug = SmartPlug(host)
+            if kasa_username and kasa_password:
+                from kasa import Discover
+
+                plug = await Discover.discover_single(
+                    host, username=kasa_username, password=kasa_password
+                )
+            else:
+                plug = SmartPlug(host)
             await plug.update()
 
             current_state = plug.is_on
@@ -284,7 +294,12 @@ class ThermostatController:
 
             return turn_on
         except Exception as e:
-            logger.error(f"Error controlling AC: {e}")
+            if "authentication" in str(e).lower() or "login" in str(e).lower():
+                logger.error(
+                    f"Kasa authentication failed - check username/password: {e}"
+                )
+            else:
+                logger.error(f"Error controlling AC: {e}")
             return False
 
     def turn_ac_on(self, **kwargs):

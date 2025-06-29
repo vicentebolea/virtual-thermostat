@@ -251,8 +251,18 @@ class SheetsLogger:
             self.current_power = 0
             return False
 
+        kasa_username = self.config.get("kasa_username")
+        kasa_password = self.config.get("kasa_password")
+
         try:
-            plug = SmartPlug(host)
+            if kasa_username and kasa_password:
+                from kasa import Discover
+
+                plug = await Discover.discover_single(
+                    host, username=kasa_username, password=kasa_password
+                )
+            else:
+                plug = SmartPlug(host)
             await plug.update()
 
             # Check AC state and record appropriate power consumption
@@ -269,7 +279,12 @@ class SheetsLogger:
                 logger.debug("Smart plug does not support power monitoring")
                 return False
         except Exception as e:
-            logger.error(f"Failed to get power data from smart plug: {e}")
+            if "authentication" in str(e).lower() or "login" in str(e).lower():
+                logger.error(
+                    f"Kasa authentication failed - check username/password: {e}"
+                )
+            else:
+                logger.error(f"Failed to get power data from smart plug: {e}")
             return False
 
     def _should_upload(self, interval_minutes):

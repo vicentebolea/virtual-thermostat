@@ -121,8 +121,17 @@ class VirtualThermostat:
     async def _control_ac(self, turn_on):
         """Control the AC via smart plug."""
         host = self.config["host"]
+        kasa_username = self.config.get("kasa_username")
+        kasa_password = self.config.get("kasa_password")
         try:
-            plug = SmartPlug(host)
+            if kasa_username and kasa_password:
+                from kasa import Discover
+
+                plug = await Discover.discover_single(
+                    host, username=kasa_username, password=kasa_password
+                )
+            else:
+                plug = SmartPlug(host)
             await plug.update()
 
             current_state = plug.is_on
@@ -139,7 +148,12 @@ class VirtualThermostat:
 
             return turn_on
         except Exception as e:
-            logger.error(f"Error controlling AC: {e}")
+            if "authentication" in str(e).lower() or "login" in str(e).lower():
+                logger.error(
+                    f"Kasa authentication failed - check username/password: {e}"
+                )
+            else:
+                logger.error(f"Error controlling AC: {e}")
             return None
 
     async def run_once(self):
@@ -158,7 +172,16 @@ class VirtualThermostat:
         # Check current actual AC state from smart plug
         try:
             host = self.config["host"]
-            plug = SmartPlug(host)
+            kasa_username = self.config.get("kasa_username")
+            kasa_password = self.config.get("kasa_password")
+            if kasa_username and kasa_password:
+                from kasa import Discover
+
+                plug = await Discover.discover_single(
+                    host, username=kasa_username, password=kasa_password
+                )
+            else:
+                plug = SmartPlug(host)
             await plug.update()
             current_ac_state = plug.is_on
 
@@ -171,7 +194,13 @@ class VirtualThermostat:
                 last_ac_state = current_ac_state
 
         except Exception as e:
-            logger.warning(f"Could not check current AC state: {e}")
+            if "authentication" in str(e).lower() or "login" in str(e).lower():
+                logger.error(
+                    f"Kasa authentication failed - check username/password: {e}"
+                )
+                raise click.ClickException(f"Authentication failed: {e}")
+            else:
+                logger.warning(f"Could not check current AC state: {e}")
             # Continue with stored state if we can't check actual state
 
         temperature = self._read_temperature()

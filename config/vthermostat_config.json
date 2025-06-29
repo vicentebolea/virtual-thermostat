@@ -1,5 +1,7 @@
 {
   "host": "192.168.1.100",
+  "kasa_username": null,
+  "kasa_password": null,
   "desired_temperature": 24.0,
   "state_file": "config/vthermostat_state.json",
   "cooldown_minutes": 15,
